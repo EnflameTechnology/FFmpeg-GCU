@@ -38,6 +38,8 @@
 #include "libavutil/intreadwrite.h"
 #include "libavutil/version.h"
 #include "libavutil/pixfmt.h"
+#define TOPSCODEC_FREE_FUNCTIONS 1
+#define TOPSCODEC_LOAD_FUNCTIONS 1
 #include "libavutil/hwcontext_topscodec.h"
 #include "avcodec.h"
 #include "decode.h"

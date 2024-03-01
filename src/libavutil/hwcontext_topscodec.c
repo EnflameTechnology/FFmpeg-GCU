@@ -21,6 +21,8 @@
 #include "common.h"
 #include "thread.h"
 #include "hwcontext.h"
+#define TOPSCODEC_FREE_FUNCTIONS 1
+#define TOPSCODEC_LOAD_FUNCTIONS 1
 #include "hwcontext_internal.h"
 #include "hwcontext_topscodec.h"
 #include "mem.h"
