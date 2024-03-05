@@ -12,6 +12,10 @@ cxx_compiler="g++"
 ffmpeg_dir=""
 build_only=false
 parallel="-j$(nproc)"
+_type="release"
+_pre_c_flags="-g0 -O3 -DNDEBUG"
+_c_flags=""
+_ldflags="-fuse-ld=gold -m64 -ldl -lpthread"
 
 usage="Usage: $0 [FFMPEG_TAG [build_path]] [Options]
 
@@ -43,7 +47,7 @@ if [ $2 ]; then
     done
 fi
 
-while getopts ':hc:C:X:S:bs:j:H:L:T:' opt; do
+while getopts ':hc:C:X:S:bs:j:H:L:T:f:l:T:' opt; do
     case "$opt" in
     b)
         build_only=true
@@ -64,6 +68,36 @@ while getopts ':hc:C:X:S:bs:j:H:L:T:' opt; do
     s)
         ffmpeg_dir=$(realpath $OPTARG)
         ;;
+    f)
+        _c_flags+=" $OPTARG"
+        ;;
+    l)
+        _ldflags+=" $OPTARG"
+        ;;
+    T)
+        case $OPTARG in
+            [Dd]ebug)
+                _pre_c_flags="-O0 -g" ;;
+            RelWithDebInfo)
+                _pre_c_flags="-O3 -g -DNDEBUG" ;;
+            MinSizeRel)
+                _pre_c_flags="-Os -g0 -DNDEBUG" ;;
+            [Cc]overage)
+                _c_flags+=" -fprofile-arcs -ftest-coverage"
+                _ldflags+=" -lgcov --coverage"
+                ;;
+            [Aa]san)
+                _c_flags+=" -g -fsanitize=address -fno-omit-frame-pointer -fno-optimize-sibling-calls"
+                _ldflags+=" -fsanitize=address -shared-libsan"
+                ;;
+            [Tt]san)
+                _c_flags+=" -g -fsanitize=thread -fno-omit-frame-pointer -fno-optimize-sibling-calls"
+                _ldflags+=" -fsanitize=thread"
+                ;;
+            * | [Rr]elease)
+                _pre_c_flags="-O3 -g0 -DNDEBUG" ;;
+        esac
+        ;;
     j)
         if [ "$OPTARG" -eq "$OPTARG" ]; then
             parallel="-j $OPTARG"
@@ -77,6 +111,10 @@ while getopts ':hc:C:X:S:bs:j:H:L:T:' opt; do
         ;;
     esac
 done
+
+_whole_c_flags="$_pre_c_flags $_c_flags"
+echo "cflags: $_whole_c_flags"
+echo "ldflags: $_ldflags"
 
 src_path=$(dirname $(readlink -f $0))
 echo "current file path: ${src_path}"
@@ -110,8 +148,8 @@ echo "configure FFmpeg"
     --cc="${cache_tool}$c_compiler" \
     --cxx="${cache_tool}$cxx_compiler" \
     $sysroot \
-    --extra-cflags="-g" \
-    --extra-ldflags="-fuse-ld=gold -m64 -ldl -lpthread " \
+    --extra-cflags="$_whole_c_flags" \
+    --extra-ldflags="$_ldflags" \
     --disable-stripping \
     --disable-x86asm \
     --disable-decoders \
