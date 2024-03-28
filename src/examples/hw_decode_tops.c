@@ -199,7 +199,7 @@ static int decode_write(AVCodecContext *avctx, AVPacket *packet, int send_eos)
                                       sw_frame->format,
                                       sw_frame->width, sw_frame->height, 1);
         if (ret < 0) {
-                av_log(avctx, AV_LOG_ERROR, "Can not copy image to buffer\n");
+            av_log(avctx, AV_LOG_ERROR, "Can not copy image to buffer\n");
             goto fail;
         }
         

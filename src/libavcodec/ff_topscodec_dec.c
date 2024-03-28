@@ -794,8 +794,8 @@ static int topscodec_receive_frame(AVCodecContext *avctx, AVFrame *frame)
     if (ctx->draining)
         goto dequeue;
 
-    if (!ctx->av_pkt.size && !ctx->recv_first_frame) 
-        goto dequeue;
+    // if (!ctx->av_pkt.size && !ctx->recv_first_frame) 
+    //     goto dequeue;
 
     ctx->ef_buf_pkt->avctx = avctx;
     ctx->ef_buf_pkt->ef_context = ctx;

@@ -158,7 +158,50 @@ static int init_decode(const char *in_file, const char *out_file,
         av_dict_set(&dec_opts, "device_id", dev_id, 0);
     if (out_fmt)/* for color space trans*/
         av_dict_set(&dec_opts, "output_pixfmt", out_fmt, 0);
-
+    /*+++++++++++++++++++++++++++++++++++++++++++++++++++++*/
+    // examples for other options:
+    // 1. set the out_port_num
+    // av_dict_set(&dec_opts, "out_port_num", "6", 0);
+    // 2. set the zero_copy
+    // av_dict_set(&dec_opts, "zero_copy", "1", 0);
+    // 3. set the rotation (only support orientation,90/180/270)
+    // av_dict_set(&dec_opts, "enable_rotation", "1", 0);
+    // av_dict_set(&dec_opts, "rotation", "90", 0);
+    // 4. set the crop
+    // (w * h)
+    // (0,0)-------------------------------------------+
+    // +              |              |                 +
+    // +            crop_top         |                 +
+    // +              |              |                 +
+    // +---crop_left--+              |                 +
+    // +                             |                 +
+    // +                           crop_bottom         +
+    // +                             |                 +
+    // +--------------crop_right-----+                 +
+    // +                                               +
+    // +-------------------------------------------(w,h)
+    // av_dict_set(&dec_opts, "enable_crop", "1", 0);
+    // av_dict_set(&dec_opts, "crop_left", "20", 0);
+    // av_dict_set(&dec_opts, "crop_top", "20", 0);
+    // av_dict_set(&dec_opts, "crop_right", "1900", 0);
+    // av_dict_set(&dec_opts, "crop_bottom", "1060", 0);
+    // 5. set the resize (0-Bilinear, 1-Nearest)
+    // av_dict_set(&dec_opts, "enable_resize", "1", 0);
+    // av_dict_set(&dec_opts, "resize_w", "640", 0);
+    // av_dict_set(&dec_opts, "resize_h", "360", 0);
+    // av_dict_set(&dec_opts, "resize_m", "0", 0);
+    // 6. set the idr_only (only decode the IDR frame)
+    // av_dict_set(&dec_opts, "idr", "1", 0);
+    // 7. set the interval (decode the frame every interval)
+    // if interval is 2, x00x00x00x00x.., x is the frame, 0 is the discard frame
+    // av_dict_set(&dec_opts, "sfo", "2", 0);
+    // 8. set the balance rate (0-300)
+    // recommend value:single core:0, multi-core:5
+    // av_dict_set(&dec_opts, "sf", "5", 0);
+    // 9. set the output_colorspace
+    // support bt601, bt709, bt2020, bt601f, bt709f, bt2020f
+    // av_dict_set(&dec_opts, "output_colorspace", "bt709", 0);
+    /*+++++++++++++++++++++++++++++++++++++++++++++++++++++*/
     if(avcodec_open2(g_dec_ctx, p_codec, &dec_opts) < 0) {
         av_log(g_dec_ctx, AV_LOG_INFO, "Could not open codec, ret(%d)\n", ret);
         return -1;
