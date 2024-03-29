@@ -5,6 +5,7 @@ set(ffmpeg_gcu_src_dir ${FFMPEG_SRC_FOR_BUILD_PATH})
 
 unset(configure_options)
 list(APPEND configure_options -s ${ffmpeg_gcu_src_dir})
+list(APPEND configure_options -a ${CMAKE_SYSTEM_PROCESSOR})
 
 if(cache_tool)
     list(APPEND configure_options -c ${cache_tool})
@@ -32,9 +33,10 @@ elseif(ENABLE_CODE_COVERAGE)
     list(APPEND configure_options -T Coverage)
 endif()
 
-# if(CMAKE_SYSROOT)
-# list(APPEND configure_options -S ${CMAKE_SYSROOT})
-# endif()
+if(CMAKE_SYSROOT)
+    list(APPEND configure_options -S ${CMAKE_SYSROOT})
+endif()
+
 set(OUTPUT_DIR ${ffmpeg_gcu_prefix}/ffmpeg_gcu)
 
 set(ffmpeg_build_outputs

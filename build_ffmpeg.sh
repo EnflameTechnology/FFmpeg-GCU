@@ -15,7 +15,9 @@ parallel="-j$(nproc)"
 _type="release"
 _pre_c_flags="-g0 -O3 -DNDEBUG"
 _c_flags=""
-_ldflags="-fuse-ld=gold -m64 -ldl -lpthread"
+_ldflags="-fuse-ld=gold -ldl -lpthread"
+_arch=""
+# _ldflags="-fuse-ld=gold -m64 -ldl -lpthread"
 
 usage="Usage: $0 [FFMPEG_TAG [build_path]] [Options]
 
@@ -29,6 +31,7 @@ Options:
     -S sysroot          sysroot
     -s ffmpeg_dir       ffmpeg source code dir
     -j parallel         make -j parallel default is \$(nproc)
+    -a arch             build with platform (x86_64, arm64, powerpc; default x86_64)
     -h                  help message
 
 exp:
@@ -47,7 +50,7 @@ if [ $2 ]; then
     done
 fi
 
-while getopts ':hc:C:X:S:bs:j:H:L:T:f:l:T:' opt; do
+while getopts ':hc:C:X:S:bs:j:H:L:T:f:l:T:a:' opt; do
     case "$opt" in
     b)
         build_only=true
@@ -96,6 +99,21 @@ while getopts ':hc:C:X:S:bs:j:H:L:T:f:l:T:' opt; do
                 ;;
             * | [Rr]elease)
                 _pre_c_flags="-O3 -g0 -DNDEBUG" ;;
+        esac
+        ;;
+    a)
+        case $OPTARG in
+            arm64|aarch64)
+                _arch="--arch=aarch64" ;;
+            arm|arm32)
+                _arch="--arch=arm" ;;
+            powerpc*|ppc*)
+                _arch="--arch=ppc" ;;
+            *|x86_64|amd64)
+                _arch="--arch=x86"
+                _pre_c_flags+=" -m64"
+                _ldflags+=" -m64"
+                ;;
         esac
         ;;
     j)
@@ -148,6 +166,7 @@ echo "configure FFmpeg"
     --cc="${cache_tool}$c_compiler" \
     --cxx="${cache_tool}$cxx_compiler" \
     $sysroot \
+    $_arch \
     --extra-cflags="$_whole_c_flags" \
     --extra-ldflags="$_ldflags" \
     --disable-stripping \
@@ -191,7 +210,8 @@ echo "configure FFmpeg"
     --enable-decoder=avs2_topscodec \
     --enable-decoder=mpeg1_cuvid \
     --enable-static \
-    --enable-shared
+    --enable-shared \
+    --enable-cross-compile
 
 if [ $? -ne 0 ]; then
     echo "configure failed"
