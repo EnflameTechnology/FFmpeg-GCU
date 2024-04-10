@@ -64,11 +64,6 @@ typedef struct job_args {
     AVInputFormat *fmt;
 } job_args_t;
 
-// static int opterr       = 1;
-// static int optind       = 1;
-// static int optopt       = 0;
-// static char *optarg     = NULL;
-
 static int g_card_start = 0;
 static int g_card_end   = 1;
 static int g_dev_start  = 0;
@@ -88,7 +83,7 @@ static void print_globle_var(void) {
     printf("g_out_file:%s\n", g_out_file);
 }
 
-static AVCodecContext *create_decoder(enum AVCodecID codec_id) {
+static AVCodec *create_decoder(enum AVCodecID codec_id) {
     AVCodec *decoder = NULL;
     switch(codec_id) {
     case AV_CODEC_ID_H264:
@@ -159,7 +154,6 @@ static int decode_write(FILE *outfile, AVCodecContext *avctx, AVPacket *packet,
 
     int ret                 = -1;
     int size                = 0;
-    int offset              = 0;
     int linesizes[4]        = {0};
     ptrdiff_t linesizes1[4] = {0};
     size_t planesizes[4]    = {0};
@@ -245,7 +239,6 @@ static int decode_write(FILE *outfile, AVCodecContext *avctx, AVPacket *packet,
             goto fail;
         }
 
-        offset = 0;
         /*Copies the non-contiguous content of the three channels data */
         /*onto the contiguous buf*/
         /*data is on the host mem*/
@@ -298,7 +291,6 @@ static void *job_thread(void *arg) {
     FILE       *output_file    = NULL;
     int64_t     count          = 0;
 
-    int        i               = 0;
     int        video_stream    = 0;
     
     const char *dev_type       = NULL;
@@ -419,7 +411,7 @@ static void *job_thread(void *arg) {
     if (output_file) {
         fclose(output_file);
     }
-    av_log(avctx, AV_LOG_INFO, "decode_EFC test finish, frames:%Ld\n", count);
+    av_log(avctx, AV_LOG_INFO, "decode_EFC test finish, frames:%ld\n", count);
     avcodec_free_context(&avctx);
     avformat_close_input(&input_ctx);
     av_buffer_unref(&hw_device_ctx);
@@ -484,23 +476,54 @@ static int parse_opt(int argc, char **argv) {
 int main(int argc, char *argv[])
 {
     int ret = 0;
+    ffmpeg_log_callback fptrLog;
+    job_args_t *jobs[MAX_CARD_ID][MAX_DEV_ID][MAX_SESSIONS]   = {0};
+    pthread_t *threads[MAX_CARD_ID][MAX_DEV_ID][MAX_SESSIONS] = {0};
+    char name[1024] = {0};
+
     parse_opt(argc, argv);
     if (g_in_file == NULL || g_out_file == NULL) {
-        printf("Usage: %s [start_card_id] [end_card_id] [start_dev_id] [end_dev_id] [sessions] <input file> <output file>\n", argv[0]);
+        printf("Usage: %s [-c start_card_id] [-n end_card_id] [-d start_dev_id] [-m end_dev_id] [-s sessions] -i <input file> -o <output file>\n", argv[0]);
         printf("Example: %s -c 0 -n 4 -d 0 -m 8 -s 32 -i input.h264 -o output.yuv\n", argv[0]);
         return -1;
     }
     print_globle_var();
-    //checkout the card_id and dev_id
-    //todo
 
-    ffmpeg_log_callback fptrLog;
+    if (g_card_start < 0 || g_card_start > MAX_CARD_ID) {
+        fprintf(stderr, "g_card_start is invalid\n");
+        return -1;
+    }
+
+    if (g_card_end < 0 || g_card_end > MAX_CARD_ID) {
+        fprintf(stderr, "g_card_end is invalid\n");
+        return -1;
+    }
+
+    if (g_dev_start < 0 || g_dev_start > MAX_DEV_ID) {
+        fprintf(stderr, "g_dev_start is invalid\n");
+        return -1;
+    }
+
+    if (g_dev_end < 0 || g_dev_end > MAX_DEV_ID) {
+        fprintf(stderr, "g_dev_end is invalid\n");
+        return -1;
+    }
+
+    if (g_sessions < 0 || g_sessions > MAX_SESSIONS) {
+        fprintf(stderr, "g_sessions is invalid\n");
+        return -1;
+    }
+
+    //checkout if the input file is exist
+    if (access(g_in_file, F_OK) != 0) {
+        fprintf(stderr, "input file %s is not exist\n", g_in_file);
+        return -1;
+    }
+
     fptrLog = log_callback_null;
     av_log_set_level(AV_LOG_DEBUG);
     av_log_set_callback(fptrLog);
 
-    job_args_t *jobs[MAX_CARD_ID][MAX_DEV_ID][MAX_SESSIONS]   = {0};
-    pthread_t *threads[MAX_CARD_ID][MAX_DEV_ID][MAX_SESSIONS] = {0};
     for (int i = g_card_start; i < g_card_end; i++) {
         for (int j = g_dev_start; j < g_dev_end; j++) {
             for (int k = 0; k < g_sessions; k++) {
@@ -512,20 +535,24 @@ int main(int argc, char *argv[])
                 jobs[i][j][k]->out_file = g_out_file;
                 jobs[i][j][k]->fmt = NULL;
                 threads[i][j][k] = (pthread_t *)malloc(sizeof(pthread_t));
+                memset(name, 0, sizeof(name));
+                snprintf(name, sizeof(name), "%s-card%d_dev%d_session%d.bin", g_out_file, i, j, k);
+                //rename outfile's name
+                jobs[i][j][k]->out_file = name;
                 ret = pthread_create(threads[i][j][k], NULL, job_thread, jobs[i][j][k]);
                 if (ret != 0) {
-                    printf("pthread_create failed, ret=%d\n", ret);
+                    fprintf(stderr, "pthread_create failed, ret=%d\n", ret);
                     return -1;
                 }
-                char name[256] = {0};
+                memset(name, 0, sizeof(name));
                 snprintf(name, sizeof(name), "card%d_dev%d_session%d", i, j, k);
-                pthread_setname_np(*threads[i][j][k], name);
-                printf("create thread %s success.\n", name);
+                // pthread_setname_np(*threads[i][j][k], name);
+                av_log(NULL, AV_LOG_INFO, "create thread %s success.\n", name);
             }
         }
     }
 
-    printf("main thread wait for all threads to finish\n");
+    av_log(NULL, AV_LOG_INFO, "main thread wait for all threads to finish\n");
     for (int i = g_card_start; i < g_card_end; i++) {
         for (int j = g_dev_start; j < g_dev_end; j++) {
             for (int k = 0; k < g_sessions; k++) {
@@ -535,6 +562,6 @@ int main(int argc, char *argv[])
             }
         }
     }
-    printf("main thread finish\n");
+    av_log(NULL, AV_LOG_INFO, "main thread finish\n");
     return 0;
 }
