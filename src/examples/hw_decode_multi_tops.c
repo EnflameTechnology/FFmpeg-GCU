@@ -48,6 +48,7 @@ typedef void (*ffmpeg_log_callback)(void *ptr, int level, const char *fmt,
 #define LOG_BUF_SIZE        (1024)
 #define MAX_CARD_ID         (4*8)
 #define MAX_DEV_ID          (4*8*8)
+#define MAX_SESSIONS        (128)
 #define DEVICE_NAME        "topscodec"
 static char            logBufPrefix[LOG_BUF_PREFIX_SIZE] = {0};
 static char            logBuffer[LOG_BUF_SIZE]           = {0};
@@ -63,11 +64,10 @@ typedef struct job_args {
     AVInputFormat *fmt;
 } job_args_t;
 
-static int opterr       = 1;
-static int optind       = 1;
-static int optopt       = 0;
-
-static char *optarg     = NULL;
+// static int opterr       = 1;
+// static int optind       = 1;
+// static int optopt       = 0;
+// static char *optarg     = NULL;
 
 static int g_card_start = 0;
 static int g_card_end   = 1;
@@ -285,7 +285,7 @@ static void log_callback_null(void *ptr, int level, const char *fmt,
     pthread_mutex_unlock(&cb_av_log_lock);
 }
 
-void *job_thread(void *arg) {
+static void *job_thread(void *arg) {
     int              ret       = 0;
     AVFormatContext *input_ctx = NULL;
     AVInputFormat   *fmt       = NULL;
@@ -319,7 +319,7 @@ void *job_thread(void *arg) {
         while((type = av_hwdevice_iterate_types(type)) != AV_HWDEVICE_TYPE_NONE)
             fprintf(stderr, " %s", av_hwdevice_get_type_name(type));
         fprintf(stderr, "\n");
-        return -1;
+        return NULL;
     }
 
     tmp_name = &job->in_file[strlen(job->in_file)-4];
@@ -331,12 +331,12 @@ void *job_thread(void *arg) {
 
     if (avformat_open_input(&input_ctx, job->in_file, fmt, NULL) != 0) {
         fprintf(stderr, "Cannot open input file '%s'\n", job->in_file);
-        return -1;
+        return NULL;
     }
 
     if (avformat_find_stream_info(input_ctx, NULL) < 0) {
         fprintf(stderr, "Cannot find input stream information.\n");
-        return -1;
+        return NULL;
     }
 
     for (size_t i = 0; i < input_ctx->nb_streams; i++) {
@@ -349,28 +349,28 @@ void *job_thread(void *arg) {
 
     if (NULL == video) {
         fprintf(stderr, "video stream is NULL\n");
-        return -1;
+        return NULL;
     }
 
     decoder = create_decoder(video->codecpar->codec_id);
 
     if(decoder == NULL) {
         fprintf(stderr, "Unsupported codec! \n");
-        return -1;
+        return NULL;
     }
 
     if (!(avctx = avcodec_alloc_context3(decoder)))
-        return AVERROR(ENOMEM);
+        return NULL;
 
     if (avcodec_parameters_to_context(avctx, video->codecpar) < 0)
-        return -1;
+        return NULL;
 
     avctx->get_format  = get_hw_format;
 
     memset(tmp, 0, sizeof(tmp));
     snprintf(tmp, sizeof(tmp), "%d", job->card_id);
     if (hw_decoder_init(hw_device_ctx, avctx, type, tmp) < 0)
-        return -1;
+        return NULL;
 
     memset(tmp, 0, sizeof(tmp));
     snprintf(tmp, sizeof(tmp), "%d", job->card_id);
@@ -382,14 +382,14 @@ void *job_thread(void *arg) {
 
     if ((ret = avcodec_open2(avctx, decoder, &dec_opts)) < 0) {
         fprintf(stderr, "Failed to open codec for stream #%d\n", video_stream);
-        return -1;
+        return NULL;
     }
     av_dict_free(&dec_opts);
 
     if (!avctx->hw_frames_ctx){
         av_log(avctx, AV_LOG_ERROR, "avctx hw_frames_ctx is NULL.\n");
         ret = AVERROR(ENOMEM);
-        return -1;
+        return NULL;
     }
 
     /* open the file to dump raw data */
@@ -419,7 +419,7 @@ void *job_thread(void *arg) {
     if (output_file) {
         fclose(output_file);
     }
-    av_log(avctx, AV_LOG_INFO, "decode_EFC test finish, frames:%d\n", count);
+    av_log(avctx, AV_LOG_INFO, "decode_EFC test finish, frames:%Ld\n", count);
     avcodec_free_context(&avctx);
     avformat_close_input(&input_ctx);
     av_buffer_unref(&hw_device_ctx);
@@ -428,7 +428,7 @@ void *job_thread(void *arg) {
 }
 
 
-int parse_opt(int argc, char **argv) {
+static int parse_opt(int argc, char **argv) {
   int result;
 
   while ((result = getopt(argc, argv, "c:n:d:m:s:i:o:")) != -1) {
@@ -436,7 +436,7 @@ int parse_opt(int argc, char **argv) {
       case 'c':
         printf("option=h, optopt=%c, optarg=%s\n", optopt, optarg);
         g_card_start = atoi(optarg);
-        PRINT("g_card_start:%d\n", g_card_start);
+        printf("g_card_start:%d\n", g_card_start);
         break;
       case 'n':
         printf("option=n, optopt=%c, optarg=%s\n", optopt, optarg);
@@ -445,7 +445,7 @@ int parse_opt(int argc, char **argv) {
         break;
       case 'd':
         printf("option=i, optopt=%c, optarg=%s\n", optopt, optarg);
-        g_dev_start = optarg;
+        g_dev_start = atoi(optarg);
         printf("g_dev_start:%d\n", g_dev_start);
         break;
       case 'm':
@@ -460,7 +460,7 @@ int parse_opt(int argc, char **argv) {
         break;
       case 'i':
         printf("option=h, optopt=%c, optarg=%s\n", optopt, optarg);
-        g_in_file = atoi(optarg);
+        g_in_file = optarg;
         printf("g_in_file:%s\n", g_in_file);
         break;
       case 'o':
@@ -499,8 +499,8 @@ int main(int argc, char *argv[])
     av_log_set_level(AV_LOG_DEBUG);
     av_log_set_callback(fptrLog);
 
-    job_args_t *jobs[MAX_CARD_ID][MAX_DEV_ID][g_sessions];
-    pthread_t *threads[MAX_CARD_ID][MAX_DEV_ID][g_sessions];
+    job_args_t *jobs[MAX_CARD_ID][MAX_DEV_ID][MAX_SESSIONS]   = {0};
+    pthread_t *threads[MAX_CARD_ID][MAX_DEV_ID][MAX_SESSIONS] = {0};
     for (int i = g_card_start; i < g_card_end; i++) {
         for (int j = g_dev_start; j < g_dev_end; j++) {
             for (int k = 0; k < g_sessions; k++) {
