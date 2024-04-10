@@ -296,7 +296,7 @@ static int topscodec_device_init(AVHWDeviceContext *device_ctx)
     int ret;
     AVTOPSCodecDeviceContext *ctx = device_ctx->hwctx;
     if(ctx->topscodec_lib_ctx){
-        ret = ctx->topscodec_lib_ctx->lib_topsInit();
+        ret = ctx->topsruntime_lib_ctx->lib_topsInit(0);
         if (ret != 0){
             av_log(ctx, AV_LOG_ERROR,
                     "Error, topscodec_init failed, ret(%d)\n", ret);
