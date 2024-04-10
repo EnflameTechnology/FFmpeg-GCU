@@ -1702,6 +1702,7 @@ EXAMPLE_LIST="
     transcoding_example
     vaapi_encode_example
     hw_decode_tops_example
+    hw_decode_multi_tops_example
     decode_tops_example
     vaapi_transcode_example
     hw_decode_tops_example
