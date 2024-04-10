@@ -69,6 +69,7 @@ static int g_card_end   = 1;
 static int g_dev_start  = 0;
 static int g_dev_end    = 1;
 static int g_sessions   = 1;
+static int g_dump_out   = 0;
 
 static const char *g_in_file  = NULL;
 static const char *g_out_file = NULL;
@@ -81,6 +82,7 @@ static void print_globle_var(void) {
     printf("g_sessions:%d\n", g_sessions);
     printf("g_in_file:%s\n", g_in_file);
     printf("g_out_file:%s\n", g_out_file);
+    printf("g_dump_out:%d\n", g_dump_out);
 }
 
 static AVCodec *create_decoder(enum AVCodecID codec_id) {
@@ -252,9 +254,12 @@ static int decode_write(FILE *outfile, AVCodecContext *avctx, AVPacket *packet,
             goto fail;
         }
         
-        if ((ret = fwrite(buffer, 1, size, outfile)) < 0) {
-            av_log(avctx, AV_LOG_ERROR, "Failed to dump raw data.\n");
-            goto fail;
+
+        if (g_dump_out && outfile) {
+            if ((ret = fwrite(buffer, 1, size, outfile)) < 0) {
+                av_log(avctx, AV_LOG_ERROR, "Failed to dump raw data.\n");
+                goto fail;
+            }
         }
 
         (*count)++;
@@ -265,7 +270,7 @@ static int decode_write(FILE *outfile, AVCodecContext *avctx, AVPacket *packet,
         av_freep(&buffer);
         if (ret < 0)
             return ret;
-    }//while
+    } //while
     return 0;
 }
 
@@ -385,7 +390,13 @@ static void *job_thread(void *arg) {
     }
 
     /* open the file to dump raw data */
-    output_file = fopen(job->out_file, "w+");
+    if (g_dump_out == 0) {
+        output_file = fopen(job->out_file, "w+");
+        if (!output_file) {
+            fprintf(stderr, "Could not open destination file %s\n", job->out_file);
+            return NULL;
+        }
+    }
 
     while (ret >= 0) {
         if ((ret = av_read_frame(input_ctx, &packet)) < 0)
@@ -408,7 +419,7 @@ static void *job_thread(void *arg) {
     ret = decode_write(output_file, avctx, &packet, 1, &count);
     av_packet_unref(&packet);
 
-    if (output_file) {
+    if (g_dump_out && output_file) {
         fclose(output_file);
     }
     av_log(avctx, AV_LOG_INFO, "decode_EFC test finish, frames:%ld\n", count);
@@ -423,7 +434,7 @@ static void *job_thread(void *arg) {
 static int parse_opt(int argc, char **argv) {
   int result;
 
-  while ((result = getopt(argc, argv, "c:n:d:m:s:i:o:")) != -1) {
+  while ((result = getopt(argc, argv, "c:n:d:m:s:i:o:y:")) != -1) {
     switch (result) {
       case 'c':
         printf("option=h, optopt=%c, optarg=%s\n", optopt, optarg);
@@ -449,6 +460,11 @@ static int parse_opt(int argc, char **argv) {
         printf("option=w, optopt=%c, optarg=%s\n", optopt, optarg);
         g_sessions = atoi(optarg);
         printf("g_sessions:%d\n", g_sessions);
+        break;
+      case 'y':
+        printf("option=y, optopt=%c, optarg=%s\n", optopt, optarg);
+        g_dump_out = atoi(optarg);
+        printf("g_dump_out:%d\n", g_dump_out);
         break;
       case 'i':
         printf("option=h, optopt=%c, optarg=%s\n", optopt, optarg);
@@ -483,8 +499,8 @@ int main(int argc, char *argv[])
 
     parse_opt(argc, argv);
     if (g_in_file == NULL || g_out_file == NULL) {
-        printf("Usage: %s [-c start_card_id] [-n end_card_id] [-d start_dev_id] [-m end_dev_id] [-s sessions] -i <input file> -o <output file>\n", argv[0]);
-        printf("Example: %s -c 0 -n 4 -d 0 -m 8 -s 32 -i input.h264 -o output.yuv\n", argv[0]);
+        printf("Usage: %s [-c start_card_id] [-n end_card_id] [-d start_dev_id] [-m end_dev_id] [-s sessions] [-y write_out_file] -i <input file> -o <output file>\n", argv[0]);
+        printf("Example: %s -c 0 -n 4 -d 0 -m 8 -s 32 -y 0 -i input.h264 -o output.yuv\n", argv[0]);
         return -1;
     }
     print_globle_var();
