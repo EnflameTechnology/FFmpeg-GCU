@@ -169,7 +169,7 @@ static av_cold int topscodec_decode_init(AVCodecContext *avctx)
     AVHWFramesContext *hwframe_ctx      = NULL;
     topscodecDecCreateInfo_t codec_info = { 0 };
     topscodecDecParams_t params         = { 0 };
-    char device_idx[sizeof(int)]        = { 0 };
+    char card_idx[sizeof(int)]          = { 0 };
 
     int ret            = 0;
     int bitstream_size = 0;
@@ -402,7 +402,7 @@ static av_cold int topscodec_decode_init(AVCodecContext *avctx)
     avctx->sw_pix_fmt = ctx->output_pixfmt;
     av_log(avctx, AV_LOG_DEBUG,"TOPSCODEC AVCTX sw pix fmt:%s\n",
             av_get_pix_fmt_name(avctx->sw_pix_fmt));
-    sprintf(device_idx, "%d", ctx->device_id);
+    sprintf(card_idx, "%d", ctx->card_id);
     if (avctx->hw_frames_ctx) {//if hw_frames_ctx setted by user
         av_buffer_unref(&ctx->hwframe);
         ctx->hwframe = av_buffer_ref(avctx->hw_frames_ctx);
@@ -429,7 +429,7 @@ static av_cold int topscodec_decode_init(AVCodecContext *avctx)
         } else {
             ret = av_hwdevice_ctx_create(&ctx->hwdevice,
                                         AV_HWDEVICE_TYPE_TOPSCODEC,
-                                        device_idx, NULL, 0);
+                                        card_idx, NULL, 0);
             if (ret < 0) {
                 av_log(avctx, AV_LOG_ERROR,
                         "Hardware device context create failed,ret(%d).\n",

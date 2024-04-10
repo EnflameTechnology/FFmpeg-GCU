@@ -251,4 +251,7 @@ cp ${ffmpeg_dir}/doc/examples/hw_decode_tops ${build_path}/ffmpeg_gcu/bin
 echo "copy decode_tops"
 cp ${ffmpeg_dir}/doc/examples/decode_tops ${build_path}/ffmpeg_gcu/bin
 
+echo "copy hw_decode_multi_tops"
+cp ${ffmpeg_dir}/doc/examples/hw_decode_multi_tops ${build_path}/ffmpeg_gcu/bin
+
 echo "build ffmpeg gcu done"

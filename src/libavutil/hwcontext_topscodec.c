@@ -295,22 +295,15 @@ static int topscodec_device_init(AVHWDeviceContext *device_ctx)
 {
     int ret;
     AVTOPSCodecDeviceContext *ctx = device_ctx->hwctx;
-
-    ret = topscodec_load_functions(&ctx->topscodec_lib_ctx);
-    if(ret != 0){
-        av_log(ctx, AV_LOG_ERROR,
-                "Error, topscodec_lib_load failed, ret(%d)\n", ret);
-        ret = AVERROR(EINVAL);
-        return ret;
+    if(ctx->topscodec_lib_ctx){
+        ret = ctx->topscodec_lib_ctx->lib_topsInit();
+        if (ret != 0){
+            av_log(ctx, AV_LOG_ERROR,
+                    "Error, topscodec_init failed, ret(%d)\n", ret);
+            ret = AVERROR(EINVAL);
+            return ret;
+        }
     }
-    ret = topsruntimes_load_functions(&ctx->topsruntime_lib_ctx);
-    if(ret != 0){
-        av_log(ctx, AV_LOG_ERROR,
-                "Error, topsruntime_lib_ctx failed, ret(%d)\n", ret);
-        ret = AVERROR(EINVAL);
-        return ret;
-    }
-
     return 0;
 }
 
@@ -331,13 +324,36 @@ static int topscodec_device_create(AVHWDeviceContext *device_ctx,
                               const char *device,/*device id*/
                               AVDictionary *opts, int flags)
 {
-    AVTOPSCodecDeviceContext *hwctx = device_ctx->hwctx;
+    AVTOPSCodecDeviceContext *ctx = device_ctx->hwctx;
     int device_idx = 0;
+    int ret        = 0;
+
+    ret = topscodec_load_functions(&ctx->topscodec_lib_ctx);
+    if (ret != 0) {
+        av_log(ctx, AV_LOG_ERROR,
+                "Error, topscodec_lib_load failed, ret(%d)\n", ret);
+        ret = AVERROR(EINVAL);
+        return ret;
+    }
+    ret = topsruntimes_load_functions(&ctx->topsruntime_lib_ctx);
+    if (ret != 0) {
+        av_log(ctx, AV_LOG_ERROR,
+                "Error, topsruntime_lib_ctx failed, ret(%d)\n", ret);
+        ret = AVERROR(EINVAL);
+        return ret;
+    }
 
     if (device) 
         device_idx = strtol(device, NULL, 0);
-    (void)hwctx;
-    (void)device_idx;
+    /*Do not be confused by the name of device_idx, in fact it's card idx*/
+    ret = ctx->topsruntime_lib_ctx->lib_topsSetDevice(device_idx);
+    if (ret != 0){
+        av_log(ctx, AV_LOG_ERROR,
+                "Error, topscodec_set_device[%d] failed, ret(%d)\n", 
+                device_idx, ret);
+        ret = AVERROR(EINVAL);
+        return ret;
+    }
     return 0;
 }
 

@@ -23,6 +23,7 @@ EXAMPLES-$(CONFIG_VAAPI_ENCODE_EXAMPLE)      += vaapi_encode
 EXAMPLES-$(CONFIG_VAAPI_TRANSCODE_EXAMPLE)   += vaapi_transcode
 EXAMPLES-$(CONFIG_HW_DECODE_TOPS_EXAMPLE)    += hw_decode_tops
 EXAMPLES-$(CONFIG_DECODE_TOPS_EXAMPLE)       += decode_tops
+EXAMPLES-$(CONFIG_HW_DECODE_MULTI_TOPS_EXAMPLE) += hw_decode_multi_tops
 
 EXAMPLES       := $(EXAMPLES-yes:%=doc/examples/%$(PROGSSUF)$(EXESUF))
 EXAMPLES_G     := $(EXAMPLES-yes:%=doc/examples/%$(PROGSSUF)_g$(EXESUF))
