@@ -221,6 +221,9 @@ static int decode_write(FILE *outfile, AVCodecContext *avctx, AVPacket *packet,
             goto fail;
         }
 
+        (*count)++;
+        av_log(avctx, AV_LOG_DEBUG, "capture frame:%ld\n", *count);
+
         size = av_image_get_buffer_size(frame->format, frame->width,
                                             frame->height, 1);
         
@@ -293,8 +296,6 @@ static int decode_write(FILE *outfile, AVCodecContext *avctx, AVPacket *packet,
                 goto fail;
             }
         }
-
-        (*count)++;
 
     fail:
         av_frame_free(&frame);
@@ -456,10 +457,14 @@ static void *job_thread(void *arg) {
     packet.data = NULL;
     packet.size = 0;
     ret = decode_write(output_file, avctx, &packet, 1, &count);
+    if (ret < 0) {
+        fprintf(stderr, "Error while flushing the decoder\n");
+    }
     av_packet_unref(&packet);
     end_time = av_gettime();
     job->frames = count;
-    job->fps = 1000000.f / ((end_time - start_time) / (count));
+    if (count > 0 && (end_time - start_time) > 0)
+        job->fps = 1000000.f / ((end_time - start_time) / (count));
 
     if (g_dump_out && output_file) {
         fclose(output_file);
@@ -561,6 +566,7 @@ int main(int argc, char *argv[])
     char *path, *file;
     char g_out_file_copy1[MAX_PATH_LEN];
     char g_out_file_copy2[MAX_PATH_LEN];
+    char env_str[MAX_PATH_LEN];
 
     uint64_t sum_frames = 0;
     float sum_fps = 0.0;
@@ -621,6 +627,20 @@ int main(int argc, char *argv[])
         av_log_set_level(AV_LOG_DEBUG);
         av_log_set_callback(fptrLog);
     }
+
+    // Set environment variable
+    memset(env_str, 0, sizeof(env_str));
+    snprintf(env_str, sizeof(env_str), "TOPS_VISIBLE_DEVICE=%d", g_card_start);
+    for (int i = g_card_start + 1; i < g_card_end; i++) {
+        snprintf(env_str + strlen(env_str), sizeof(env_str), ",%d", i);
+    }
+    printf("env_str:%s\n", env_str);
+
+    if (setenv("TOPS_VISIBLE_DEVICE", env_str, 1) != 0) {
+        fprintf(stderr, "Failed to set TOPS_VISIBLE_DEVICE\n");
+        return -1;
+    }
+    printf("TOPS_VISIBLE_DEVICE:%s\n", getenv("TOPS_VISIBLE_DEVICE"));
 
     for (int i = g_card_start; i < g_card_end; i++) {
         for (int j = g_dev_start; j < g_dev_end; j++) {
