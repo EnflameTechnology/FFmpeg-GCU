@@ -343,8 +343,8 @@ static av_cold int topscodec_decode_init(AVCodecContext *avctx)
             ctx->crop.right  > avctx->width               ||
             ctx->crop.top    >= ctx->crop.bottom          ||
             ctx->crop.left   >= ctx->crop.right           ||
-            ctx->crop.bottom - ctx->crop.top  <= 8        ||
-            ctx->crop.right  - ctx->crop.left <= 8) {
+            ctx->crop.bottom - ctx->crop.top  <  8        ||
+            ctx->crop.right  - ctx->crop.left < 8) {
             av_log(avctx, AV_LOG_ERROR,
             "Invalid crop dim(lefg:%d,top:%d)(right:%d,bottom:%d)\n",
             ctx->crop.left, ctx->crop.top, ctx->crop.right, ctx->crop.bottom);
