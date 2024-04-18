@@ -885,8 +885,7 @@ fail:
 #define OFFSET(x) offsetof(EFCodecDecContext_t, x)
 #define VD AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_DECODING_PARAM
 #define DEFAULT 0
-#define MAX_DEVICE_ID 7
-#define MAX_INSTANCE_ID 7
+#define MAX_DEVICE_ID (32)
 
 static const AVOption options[] = {
     { "card_id",
