@@ -392,7 +392,7 @@ int ff_topscodec_avpkt_to_efbuf(const AVPacket *avpkt, EFBuffer *efbuf)
     
     if (avpkt->size >= 0 ){
         memcpy(data, avpkt->data, avpkt->size);
-        av_log(avctx, AV_LOG_ERROR, "h2d(memcpy): host %p -> dev %p, size %u \n",
+        av_log(avctx, AV_LOG_DEBUG, "h2d(memcpy): host %p -> dev %p, size %u \n",
                     avpkt->data, data, efpkt->data_len);
     }
 
