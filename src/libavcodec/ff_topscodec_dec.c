@@ -719,6 +719,7 @@ static int topscodec_recived_helper(AVCodecContext *avctx, AVFrame *avframe)
             return AVERROR_EOF;
         } 
     } else if (TOPSCODEC_ERROR_BUFFER_EMPTY == ret){
+        av_log(avctx, AV_LOG_DEBUG, "TOPSCODEC_ERROR_BUFFER_EMPTY\n");
         return AVERROR(EAGAIN);
     } else {
         return AVERROR(EPERM);
@@ -817,7 +818,6 @@ static int topscodec_receive_frame(AVCodecContext *avctx, AVFrame *frame)
                     do {
                         av_log(avctx, AV_LOG_DEBUG,
                                 "topscodecDecodeStream timeout,retry again!\n");
-                        av_usleep(1);
                         ret = ctx->topscodec_lib_ctx->lib_topscodecDecodeStream(
                                                     ctx->handle,
                                                     &ctx->ef_buf_pkt->ef_pkt,
@@ -829,6 +829,7 @@ static int topscodec_receive_frame(AVCodecContext *avctx, AVFrame *frame)
                                     ret);
                             goto fail;
                         }
+                        av_usleep(5);
                     } while (ret == TOPSCODEC_ERROR_TIMEOUT);
                 } else {
                     av_log(avctx, AV_LOG_ERROR,
@@ -850,7 +851,6 @@ static int topscodec_receive_frame(AVCodecContext *avctx, AVFrame *frame)
             do {
                 av_log(avctx, AV_LOG_DEBUG,
                         "topscodecDecodeStream timeout,retry again!\n");
-                av_usleep(1);
                 ret = ctx->topscodec_lib_ctx->lib_topscodecDecodeStream(
                                                 ctx->handle, 
                                                 &ctx->ef_buf_pkt->ef_pkt,
@@ -861,6 +861,7 @@ static int topscodec_receive_frame(AVCodecContext *avctx, AVFrame *frame)
                             "topscodecDecSendStream failed. ret = %d\n", ret);
                     goto fail;
                 }
+                av_usleep(5);
             } while (ret == TOPSCODEC_ERROR_TIMEOUT);
         } else {
             av_log(avctx, AV_LOG_ERROR,

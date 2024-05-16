@@ -276,6 +276,9 @@ int ff_topscodec_efbuf_to_avframe(const EFBuffer *efbuf, AVFrame *avframe)
                         __func__, __LINE__);
                 return AVERROR_BUG;
             }
+            av_log(log_ctx, AV_LOG_DEBUG, 
+                    "d2d: host %p -> dev %p, size %lu\n",
+                    data[i], avframe->data[i], planesizes[i]);
         }//for
         topscodec->lib_topscodecDecFrameUnmap(ctx->handle, &efbuf->ef_frame);
     } else {/*zero copy*/
@@ -386,13 +389,22 @@ int ff_topscodec_avpkt_to_efbuf(const AVPacket *avpkt, EFBuffer *efbuf)
             return AVERROR(EPERM);
         }
         ctx->stream_addr = (uint64_t)tmp;
+        av_log(avctx, AV_LOG_DEBUG, "malloc stream_addr:0x%lx\n", 
+                                                            ctx->stream_addr);
     }
 
     data = (void*)ctx->stream_addr;
     
     if (avpkt->size >= 0 ){
-        memcpy(data, avpkt->data, avpkt->size);
-        av_log(avctx, AV_LOG_DEBUG, "h2d(memcpy): host %p -> dev %p, size %u \n",
+        // memcpy(data, avpkt->data, avpkt->size);
+        tops_ret = topsruntimes->lib_topsMemcpyHtoD(data, avpkt->data, 
+                                                    avpkt->size);
+        if (tops_ret != topsSuccess) {
+            av_log(avctx, AV_LOG_ERROR, "topsMemcpyHtoD failed!\n");
+            return AVERROR(EPERM);
+        }
+        av_log(avctx, AV_LOG_DEBUG, 
+                    "h2d(topsMemcpyHtoD): host %p -> dev %p, size %u \n",
                     avpkt->data, data, efpkt->data_len);
     }
 

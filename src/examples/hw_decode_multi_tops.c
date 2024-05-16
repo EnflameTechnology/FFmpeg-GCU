@@ -210,12 +210,16 @@ static int decode_write(FILE *outfile, AVCodecContext *avctx, AVPacket *packet,
             av_frame_free(&frame);
             av_frame_free(&sw_frame);
             return 0;
-        } else if(ret == AVERROR(EAGAIN)){
-            if(send_eos)
+        } else if (ret == AVERROR(EAGAIN)){
+            if (send_eos) {
+                av_usleep(5);
+                av_log(avctx, AV_LOG_DEBUG, "EOS EAGAIN\n");
                 continue;
-            else    
+            } else {
+                av_usleep(5);
+                av_log(avctx, AV_LOG_DEBUG, "EAGAIN\n");
                 return 0;
-
+            }           
         } else if (ret < 0) {
             av_log(avctx, AV_LOG_ERROR, "Error while decoding, ret=%d\n", ret);
             goto fail;
@@ -224,73 +228,74 @@ static int decode_write(FILE *outfile, AVCodecContext *avctx, AVPacket *packet,
         (*count)++;
         av_log(avctx, AV_LOG_DEBUG, "capture frame:%ld\n", *count);
 
-        size = av_image_get_buffer_size(frame->format, frame->width,
-                                            frame->height, 1);
+        if (g_dump_out && outfile) {    
+            size = av_image_get_buffer_size(frame->format, frame->width,
+                                                frame->height, 1);
+
+            /*Be sure to obtain w/h/format from the output frame.*/
+            sw_frame->width  = frame->width;
+            sw_frame->height = frame->height;
+            sw_frame->format = frame->format;
+
+            av_log(avctx, AV_LOG_DEBUG, "frame format:%s, w:%d, h:%d\n",
+                    av_get_pix_fmt_name(frame->format),
+                    frame->width, frame->height);
+            ret =  av_image_fill_linesizes(linesizes, sw_frame->format,
+                                            sw_frame->width);
+            if (ret < 0){
+                av_log(avctx, AV_LOG_ERROR,
+                        "av_image_fill_plane_sizes failed.\n");
+                goto fail;
+            }
+
+            for (int i = 0; i < 4; i++){
+                linesizes1[i] = linesizes[i];
+                av_log(avctx, AV_LOG_DEBUG, "ptrlinesizes[%d]:%ld\n",
+                            i, linesizes1[i]);
+            }   
+            ret = av_image_fill_plane_sizes(planesizes, sw_frame->format,
+                                            sw_frame->height, linesizes1);
+            if (ret < 0){
+                av_log(avctx, AV_LOG_ERROR,
+                        "av_image_fill_plane_sizes failed.\n");
+                goto fail;
+            }
+
         
-        /*Be sure to obtain w/h/format from the output frame.*/
-        sw_frame->width  = frame->width;
-        sw_frame->height = frame->height;
-        sw_frame->format = frame->format;
+            av_frame_get_buffer(sw_frame, 0);
+            /*
+            Copy data from the device-side memory to the host/device memory.
+            If you want to copy device-side data to other places, you can use 
+            topsMemcpy directly.
+            */
+            ret = av_hwframe_transfer_data(sw_frame, frame, 0);
+            if (ret < 0) {
+                av_log(avctx, AV_LOG_ERROR,
+                        "Error transferring the data to Host memory\n");
+                goto fail;
+            }   
+    
+            /*Allocate a contiguous period of memory*/
+            buffer = av_malloc(size);
+            if (!buffer) {
+                av_log(avctx, AV_LOG_ERROR, "Can not alloc buffer\n");
+                ret = AVERROR(ENOMEM);
+                goto fail;
+            }
 
-        av_log(avctx, AV_LOG_DEBUG, "frame format:%s, w:%d, h:%d\n",
-                av_get_pix_fmt_name(frame->format),
-                frame->width, frame->height);
-        ret =  av_image_fill_linesizes(linesizes, sw_frame->format,
-                                        sw_frame->width);
-        if (ret < 0){
-            av_log(avctx, AV_LOG_ERROR,"av_image_fill_plane_sizes failed.\n");
-            goto fail;
-        }
-
-        for (int i = 0; i < 4; i++){
-            linesizes1[i] = linesizes[i];
-            av_log(avctx, AV_LOG_DEBUG, "ptrlinesizes[%d]:%ld\n",
-                        i, linesizes1[i]);
-        }   
-        ret = av_image_fill_plane_sizes(planesizes, sw_frame->format,
-                                        sw_frame->height, linesizes1);
-        if (ret < 0){
-            av_log(avctx, AV_LOG_ERROR,"av_image_fill_plane_sizes failed.\n");
-            goto fail;
-        }
-
-        av_frame_get_buffer(sw_frame, 0);
-
-        /*
-        Copy data from the device-side memory to the host/device memory.
-        If you want to copy device-side data to other places, you can use 
-        topsMemcpy directly.
-        */
-        ret = av_hwframe_transfer_data(sw_frame, frame, 0);
-        if (ret < 0) {
-            av_log(avctx, AV_LOG_ERROR,
-                    "Error transferring the data to Host memory\n");
-            goto fail;
-        }   
- 
-        /*Allocate a contiguous period of memory*/
-        buffer = av_malloc(size);
-        if (!buffer) {
-            av_log(avctx, AV_LOG_ERROR, "Can not alloc buffer\n");
-            ret = AVERROR(ENOMEM);
-            goto fail;
-        }
-
-        /*Copies the non-contiguous content of the three channels data */
-        /*onto the contiguous buf*/
-        /*data is on the host mem*/
-        ret = av_image_copy_to_buffer(buffer, size,
-                                      (const uint8_t * const *)sw_frame->data,
-                                      (const int *)sw_frame->linesize, 
-                                      sw_frame->format,
-                                      sw_frame->width, sw_frame->height, 1);
-        if (ret < 0) {
-            av_log(avctx, AV_LOG_ERROR, "Can not copy image to buffer\n");
-            goto fail;
-        }
+            /*Copies the non-contiguous content of the three channels data */
+            /*onto the contiguous buf*/
+            /*data is on the host mem*/
+            ret = av_image_copy_to_buffer(buffer, size,
+                                        (const uint8_t * const *)sw_frame->data,
+                                        (const int *)sw_frame->linesize, 
+                                        sw_frame->format,
+                                        sw_frame->width, sw_frame->height, 1);
+            if (ret < 0) {
+                av_log(avctx, AV_LOG_ERROR, "Can not copy image to buffer\n");
+                goto fail;
+            }
         
-
-        if (g_dump_out && outfile) {
             if ((ret = fwrite(buffer, 1, size, outfile)) < 0) {
                 av_log(avctx, AV_LOG_ERROR, "Failed to dump raw data.\n");
                 goto fail;
@@ -415,6 +420,8 @@ static void *job_thread(void *arg) {
     memset(tmp, 0, sizeof(tmp));
     snprintf(tmp, sizeof(tmp), "%d", job->sf);
     av_dict_set(&dec_opts, "sf", tmp, 0);
+
+    av_dict_set(&dec_opts, "zero_copy", "1", 0);
 
     if ((ret = avcodec_open2(avctx, decoder, &dec_opts)) < 0) {
         fprintf(stderr, "Failed to open codec for stream #%d\n", video_stream);

@@ -89,7 +89,6 @@ static int decode_write(AVCodecContext *avctx, AVPacket *packet, int send_eos)
 
     int ret                 = -1;
     int size                = 0;
-    int offset              = 0;
     int linesizes[4]        = {0};
     ptrdiff_t linesizes1[4] = {0};
     size_t planesizes[4]    = {0};
@@ -189,7 +188,6 @@ static int decode_write(AVCodecContext *avctx, AVPacket *packet, int send_eos)
             goto fail;
         }
 
-        offset = 0;
         /*Copies the non-contiguous content of the three channels data */
         /*onto the contiguous buf*/
         /*data is on the host mem*/
@@ -216,7 +214,7 @@ static int decode_write(AVCodecContext *avctx, AVPacket *packet, int send_eos)
         av_freep(&buffer);
         if (ret < 0)
             return ret;
-    }//while
+    } //while
     return 0;
 }
 
