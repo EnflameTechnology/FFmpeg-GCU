@@ -94,6 +94,14 @@ add_custom_target(ffmpeg_target ALL
     DEPENDS ${ffmpeg_build_outputs}
 )
 
+add_custom_target(ffmpeg_pkg_from_gcu
+    COMMAND mkdir -p ${CMAKE_BINARY_DIR}/bin ${CMAKE_BINARY_DIR}/lib
+    COMMAND find ${ffmpeg_gcu_prefix}/ffmpeg_gcu/bin -maxdepth 1 -mindepth 1 -type f -exec ln -sf {} ${CMAKE_BINARY_DIR}/bin \\\;
+    COMMAND find ${ffmpeg_gcu_prefix}/ffmpeg_gcu/lib -maxdepth 1 -mindepth 1 -type f -exec ln -sf {} ${CMAKE_BINARY_DIR}/lib \\\;
+    COMMAND find ${ffmpeg_gcu_src_dir} -maxdepth 1 -mindepth 1 -type d -exec ln -sf {} ${CMAKE_BINARY_DIR} \\\;
+    DEPENDS ffmpeg_target
+)
+
 install(
     DIRECTORY
     ${ffmpeg_gcu_prefix}/ffmpeg_gcu/bin
