@@ -6,6 +6,7 @@ FFMPEG_TAG=${FFMPEG_TAG:-"n4.5-dev"}
 FFMPEG_REPO=${FFMPEG_REPO:-"https://github.com/FFmpeg/FFmpeg.git"}
 build_path=$(dirname $(readlink -f "$0"))/build
 cache_tool=""
+no_cache=false
 sysroot=""
 c_compiler="gcc"
 cxx_compiler="g++"
@@ -82,7 +83,10 @@ while getopts ':hc:C:X:S:bs:j:H:L:T:f:l:T:a:' opt; do
             [Dd]ebug)
                 _pre_c_flags="-O0 -g" ;;
             RelWithDebInfo)
-                _pre_c_flags="-O3 -g -DNDEBUG" ;;
+                _pre_c_flags="-O3 -g -DNDEBUG -gsplit-dwarf"
+                _ldflags+=" -Wl,--gdb-index"
+                no_cache=true
+                ;;
             MinSizeRel)
                 _pre_c_flags="-Os -g0 -DNDEBUG" ;;
             [Cc]overage)
@@ -129,6 +133,8 @@ while getopts ':hc:C:X:S:bs:j:H:L:T:f:l:T:a:' opt; do
         ;;
     esac
 done
+
+$no_cache && cache_tool=''
 
 _whole_c_flags="$_pre_c_flags $_c_flags"
 echo "cflags: $_whole_c_flags"
