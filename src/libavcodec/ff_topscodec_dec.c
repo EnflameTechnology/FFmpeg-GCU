@@ -547,6 +547,9 @@ static av_cold int topscodec_decode_init(AVCodecContext *avctx)
     params.color_space  = str_2_topsolorspace(ctx->color_space);
     av_log(avctx, AV_LOG_DEBUG, "Out Colorspace: %s\n", ctx->color_space);
 
+    params.input_buf_num  = ctx->input_buf_num;
+    av_log(avctx, AV_LOG_DEBUG, "input_buf_num: %d\n", ctx->input_buf_num);
+
     params.output_buf_num  = ctx->output_buf_num;
     av_log(avctx, AV_LOG_DEBUG, "output_buf_num: %d\n", ctx->output_buf_num);
 
@@ -931,7 +934,17 @@ static const AVOption options[] = {
         { .i64 = 8 },
         0,
         100,
-        VD },
+        VD 
+    },
+    { "in_port_num",
+        "decode inport buf num",
+        OFFSET(input_buf_num),
+        AV_OPT_TYPE_INT,
+        { .i64 = 8 },
+        0,
+        100,
+        VD 
+    },
     { "zero_copy",
         "copy the decoded image back to CPU",
         OFFSET(zero_copy),

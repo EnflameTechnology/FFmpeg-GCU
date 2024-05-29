@@ -36,6 +36,7 @@ typedef struct {
     int      sf;
     int      zero_copy;
     int      output_buf_num;
+    int      input_buf_num;
 
     int trace_flag;
     int enable_crop;
