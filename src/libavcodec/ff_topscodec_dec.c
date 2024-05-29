@@ -547,7 +547,7 @@ static av_cold int topscodec_decode_init(AVCodecContext *avctx)
     params.color_space  = str_2_topsolorspace(ctx->color_space);
     av_log(avctx, AV_LOG_DEBUG, "Out Colorspace: %s\n", ctx->color_space);
 
-    params.input_buf_num  = ctx->input_buf_num;
+    params.reserved[4] = ctx->input_buf_num;
     av_log(avctx, AV_LOG_DEBUG, "input_buf_num: %d\n", ctx->input_buf_num);
 
     params.output_buf_num  = ctx->output_buf_num;
