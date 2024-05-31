@@ -39,31 +39,41 @@ endif()
 
 set(OUTPUT_DIR ${ffmpeg_gcu_prefix}/ffmpeg_gcu)
 
-set(ffmpeg_build_outputs
-    ${OUTPUT_DIR}/lib/libavcodec.so
-    ${OUTPUT_DIR}/lib/libavcodec.so.58
-    ${OUTPUT_DIR}/lib/libavcodec.so.58.135.100
-    ${OUTPUT_DIR}/lib/libavdevice.so
-    ${OUTPUT_DIR}/lib/libavdevice.so.58
-    ${OUTPUT_DIR}/lib/libavdevice.so.58.14.100
-    ${OUTPUT_DIR}/lib/libavfilter.so
-    ${OUTPUT_DIR}/lib/libavfilter.so.7
-    ${OUTPUT_DIR}/lib/libavfilter.so.7.111.100
-    ${OUTPUT_DIR}/lib/libavformat.so
-    ${OUTPUT_DIR}/lib/libavformat.so.58
-    ${OUTPUT_DIR}/lib/libavformat.so.58.77.100
-    ${OUTPUT_DIR}/lib/libavutil.so
-    ${OUTPUT_DIR}/lib/libavutil.so.56
-    ${OUTPUT_DIR}/lib/libavutil.so.56.71.100
-    ${OUTPUT_DIR}/lib/libswresample.so
-    ${OUTPUT_DIR}/lib/libswresample.so.3
-    ${OUTPUT_DIR}/lib/libswresample.so.3.10.100
-    ${OUTPUT_DIR}/lib/libswscale.so
-    ${OUTPUT_DIR}/lib/libswscale.so.5
-    ${OUTPUT_DIR}/lib/libswscale.so.5.10.100
+unset(ffmpeg_build_outputs)
+if(OUTPUT_LIBS)
+    foreach(_lib IN LISTS OUTPUT_LIBS)
+        list(APPEND ffmpeg_build_outputs ${OUTPUT_DIR}/lib/${_lib})
+    endforeach()
+else()
+    set(ffmpeg_build_outputs
+        ${OUTPUT_DIR}/lib/libavcodec.so
+        ${OUTPUT_DIR}/lib/libavcodec.so.58
+        ${OUTPUT_DIR}/lib/libavcodec.so.58.134.100
+        ${OUTPUT_DIR}/lib/libavdevice.so
+        ${OUTPUT_DIR}/lib/libavdevice.so.58
+        ${OUTPUT_DIR}/lib/libavdevice.so.58.13.100
+        ${OUTPUT_DIR}/lib/libavfilter.so
+        ${OUTPUT_DIR}/lib/libavfilter.so.7
+        ${OUTPUT_DIR}/lib/libavfilter.so.7.110.100
+        ${OUTPUT_DIR}/lib/libavformat.so
+        ${OUTPUT_DIR}/lib/libavformat.so.58
+        ${OUTPUT_DIR}/lib/libavformat.so.58.76.100
+        ${OUTPUT_DIR}/lib/libavutil.so
+        ${OUTPUT_DIR}/lib/libavutil.so.56
+        ${OUTPUT_DIR}/lib/libavutil.so.56.70.100
+        ${OUTPUT_DIR}/lib/libswresample.so
+        ${OUTPUT_DIR}/lib/libswresample.so.3
+        ${OUTPUT_DIR}/lib/libswresample.so.3.9.100
+        ${OUTPUT_DIR}/lib/libswscale.so
+        ${OUTPUT_DIR}/lib/libswscale.so.5
+        ${OUTPUT_DIR}/lib/libswscale.so.5.9.100
+    )
+endif()
+list(APPEND ffmpeg_build_outputs
     ${OUTPUT_DIR}/bin/ffmpeg
     ${OUTPUT_DIR}/bin/ffprobe
 )
+
 
 set(INCS ${INCS})
 string(CONCAT INCS ${INCS} ":${FFMPEG_GCU_HEADER_PATH}")
@@ -86,7 +96,6 @@ add_custom_command(
     DEPENDS ffmpeg_gcu_header_target
     DEPENDS ffmpeg_gpu_header_target_12_1_14_0
     DEPENDS ffmpeg_src
-    DEPENDS PREBUILD_TOPSCODEC_DEB_EXTRACT
     USES_TERMINAL
 )
 
