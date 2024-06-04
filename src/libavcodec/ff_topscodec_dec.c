@@ -946,7 +946,7 @@ static const AVOption options[] = {
         VD 
     },
     { "zero_copy",
-        "copy the decoded image back to CPU",
+        "copy the decoded image to the hw frame buffer(D2D)",
         OFFSET(zero_copy),
         AV_OPT_TYPE_BOOL,
         {.i64 = 1},
