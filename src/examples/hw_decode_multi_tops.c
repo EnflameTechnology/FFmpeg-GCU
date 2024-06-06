@@ -506,7 +506,7 @@ static void *job_thread(void *arg) {
 static int parse_opt(int argc, char **argv) {
   int result;
 
-  while ((result = getopt(argc, argv, "c:n:d:m:s:i:o:y:l:k:f:b:p")) != -1) {
+  while ((result = getopt(argc, argv, "c:n:d:m:s:i:o:y:l:k:f:b:p:")) != -1) {
     switch (result) {
       case 'c':
         printf("option=h, optopt=%c, optarg=%s\n", optopt, optarg);
