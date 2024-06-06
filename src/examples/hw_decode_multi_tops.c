@@ -65,6 +65,8 @@ typedef struct job_args {
     int session_id;
     int out_fmt;
     int sf;
+    int in_port_num;
+    int out_port_num;
     float fps;
     int frames;
     char out_file[MAX_PATH_LEN];
@@ -81,6 +83,8 @@ static int g_dump_out   = 0;
 static int g_log_level  = 2;
 static int g_kill_flag  = 0;
 static int g_frame_sf   = 0;
+static int g_in_port_num    = 0;
+static int g_out_port_num   = 0;
 
 static const char *g_in_file  = NULL;
 static const char *g_out_file = NULL;
@@ -96,6 +100,9 @@ static void print_globle_var(void) {
     printf("g_dump_out:%d\n", g_dump_out);
     printf("g_log_level:%d\n", g_log_level);
     printf("g_kill_flag:%d\n", g_kill_flag);
+    printf("g_frame_sf:%d\n", g_frame_sf);
+    printf("g_in_port_num:%d\n", g_in_port_num);
+    printf("g_out_port_num:%d\n", g_out_port_num);
 }
 
 static int end_with(const char *str, const char *suffix) {
@@ -421,6 +428,14 @@ static void *job_thread(void *arg) {
     snprintf(tmp, sizeof(tmp), "%d", job->sf);
     av_dict_set(&dec_opts, "sf", tmp, 0);
 
+    memset(tmp, 0, sizeof(tmp));
+    snprintf(tmp, sizeof(tmp), "%d", job->in_port_num);
+    av_dict_set(&dec_opts, "in_port_num", tmp, 0);
+
+    memset(tmp, 0, sizeof(tmp));
+    snprintf(tmp, sizeof(tmp), "%d", job->out_port_num);
+    av_dict_set(&dec_opts, "out_port_num", tmp, 0);
+
     av_dict_set(&dec_opts, "zero_copy", "1", 0);
 
     if ((ret = avcodec_open2(avctx, decoder, &dec_opts)) < 0) {
@@ -491,7 +506,7 @@ static void *job_thread(void *arg) {
 static int parse_opt(int argc, char **argv) {
   int result;
 
-  while ((result = getopt(argc, argv, "c:n:d:m:s:i:o:y:l:k:f:")) != -1) {
+  while ((result = getopt(argc, argv, "c:n:d:m:s:i:o:y:l:k:f:b:p")) != -1) {
     switch (result) {
       case 'c':
         printf("option=h, optopt=%c, optarg=%s\n", optopt, optarg);
@@ -537,6 +552,16 @@ static int parse_opt(int argc, char **argv) {
         printf("option=y, optopt=%c, optarg=%s\n", optopt, optarg);
         g_frame_sf = atoi(optarg);
         printf("g_frame_sf:%d\n", g_frame_sf);
+        break;
+      case 'b':
+        printf("option=y, optopt=%c, optarg=%s\n", optopt, optarg);
+        g_in_port_num = atoi(optarg);
+        printf("g_in_port_num:%d\n", g_in_port_num);
+        break;
+      case 'p':
+        printf("option=y, optopt=%c, optarg=%s\n", optopt, optarg);
+        g_out_port_num = atoi(optarg);
+        printf("g_out_port_num:%d\n", g_out_port_num);
         break;
       case 'i':
         printf("option=h, optopt=%c, optarg=%s\n", optopt, optarg);
@@ -586,7 +611,7 @@ int main(int argc, char *argv[])
 
     parse_opt(argc, argv);
     if (g_in_file == NULL || g_out_file == NULL) {
-        printf("Usage: %s [-k kill_self 0/1] [-l loglevel0/1/2] [-c start_card_id] [-n end_card_id] [-d start_dev_id] [-m end_dev_id] [-s sessions] [-y write_out_file 0/1] -i <input file> -o <output file>\n", argv[0]);
+        printf("Usage: %s [-k kill_self 0/1] [-l loglevel0/1/2] [-f switch_frame] [-b in_port_num] [-p out_port_num] [-c start_card_id] [-n end_card_id] [-d start_dev_id] [-m end_dev_id] [-s sessions] [-y write_out_file 0/1] -i <input file> -o <output file>\n", argv[0]);
         printf("Example: %s -k 0 -l 2 -c 0 -n 4 -d 0 -m 8 -s 32 -y 0 -i input.h264 -o output.yuv\n", argv[0]);
         return -1;
     }
@@ -663,6 +688,8 @@ int main(int argc, char *argv[])
                 jobs[i][j][k]->session_id = k;
                 jobs[i][j][k]->in_file = g_in_file;
                 jobs[i][j][k]->sf = g_frame_sf;
+                jobs[i][j][k]->in_port_num  = g_in_port_num;
+                jobs[i][j][k]->out_port_num = g_out_port_num;
                 threads[i][j][k] = (pthread_t *)malloc(sizeof(pthread_t));
                 memset(name, 0, sizeof(name));
                 memset(g_out_file_copy1, 0, sizeof(g_out_file_copy1));
