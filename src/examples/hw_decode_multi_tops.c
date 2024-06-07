@@ -58,6 +58,8 @@ typedef void (*ffmpeg_log_callback)(void *ptr, int level, const char *fmt,
 static char            logBufPrefix[LOG_BUF_PREFIX_SIZE] = {0};
 static char            logBuffer[LOG_BUF_SIZE]           = {0};
 static pthread_mutex_t cb_av_log_lock;
+static uint8_t g_receive[MAX_CARD_ID][MAX_DEV_ID][MAX_SESSIONS] = {0};
+static uint8_t g_start[MAX_CARD_ID][MAX_DEV_ID][MAX_SESSIONS]   = {0};
 
 typedef struct job_args {
     int card_id;
@@ -69,6 +71,9 @@ typedef struct job_args {
     int out_port_num;
     float fps;
     int frames;
+    int first_read_frames;
+    uint64_t start_time;
+    uint64_t latency;
     char out_file[MAX_PATH_LEN];
     char job_name[MAX_PATH_LEN];
     const char *in_file;
@@ -186,8 +191,32 @@ static enum AVPixelFormat get_hw_format(AVCodecContext *ctx,
     return AV_PIX_FMT_NONE;
 }
 
-static int decode_write(FILE *outfile, AVCodecContext *avctx, AVPacket *packet, 
-                            int send_eos, int64_t *count)
+static void codec_start_synchoronize(int card, int dev) {
+    int index = 0;
+    while (index < g_sessions) {
+        if (g_start[card][dev][index] != 1) {
+            av_usleep(1);
+            index = 0;
+            continue;
+        }
+        index++;
+    }
+}
+
+static void first_frame_synchoronize(int card, int dev) {
+    int index = 0;
+    while (index < g_sessions) {
+        if (g_receive[card][dev][index] != 1) {
+            av_usleep(1);
+            index = 0;
+            continue;
+        }
+        index++;
+    }
+}
+
+static int decode_write(job_args_t *job, FILE *outfile, AVCodecContext *avctx, 
+                        AVPacket *packet, int send_eos)
 {
     AVFrame *frame          = NULL;
     AVFrame *sw_frame       = NULL;
@@ -206,6 +235,12 @@ static int decode_write(FILE *outfile, AVCodecContext *avctx, AVPacket *packet,
     }
 
     while (1) {
+        if (job->frames > 0 && job->start_time == 0) {
+            if (job->first_read_frames == 0) {
+                job->first_read_frames = job->frames;
+                job->start_time = av_gettime();
+            }
+        }
         if (!(frame = av_frame_alloc()) || !(sw_frame = av_frame_alloc())) {
             av_log(avctx, AV_LOG_ERROR, "Can not alloc frame.\n");
             ret = AVERROR(ENOMEM);
@@ -219,11 +254,11 @@ static int decode_write(FILE *outfile, AVCodecContext *avctx, AVPacket *packet,
             return 0;
         } else if (ret == AVERROR(EAGAIN)){
             if (send_eos) {
-                av_usleep(5);
+                av_usleep(1);
                 av_log(avctx, AV_LOG_DEBUG, "EOS EAGAIN\n");
                 continue;
             } else {
-                av_usleep(5);
+                av_usleep(1);
                 av_log(avctx, AV_LOG_DEBUG, "EAGAIN\n");
                 return 0;
             }           
@@ -232,8 +267,13 @@ static int decode_write(FILE *outfile, AVCodecContext *avctx, AVPacket *packet,
             goto fail;
         }
 
-        (*count)++;
-        av_log(avctx, AV_LOG_DEBUG, "capture frame:%ld\n", *count);
+        job->frames++;
+        if (job->frames == 1 && g_receive[job->session_id] == 0) {
+            g_receive[job->card_id][job->dev_id][job->session_id] = 1;
+            printf("card:%d, dev:%d, session:%d, first frame received\n", job->card_id, job->dev_id, job->session_id);
+            first_frame_synchoronize(job->card_id, job->dev_id);
+        }
+        av_log(avctx, AV_LOG_DEBUG, "capture frame:%ld\n", job->frames);
 
         if (g_dump_out && outfile) {    
             size = av_image_get_buffer_size(frame->format, frame->width,
@@ -459,15 +499,28 @@ static void *job_thread(void *arg) {
         }
         av_log(avctx, AV_LOG_DEBUG, "open output file %s\n", job->out_file);
     }
+    // sychoronize sessions
+    g_start[job->card_id][job->dev_id][job->session_id] = 1;
+    codec_start_synchoronize(job->card_id, job->dev_id);
+
+    job->frames = 0;
+    job->first_read_frames = 0;
+    job->start_time = 0;
     start_time = av_gettime();
     while (ret >= 0) {
+        if (job->frames > 0 && job->start_time == 0) {
+            if (job->first_read_frames == 0) {
+                job->first_read_frames = job->frames;
+                job->start_time = av_gettime();
+            }
+        }
         if ((ret = av_read_frame(input_ctx, &packet)) < 0)
             break;
 
         if (video_stream != packet.stream_index) {
             continue;
         }
-        ret = decode_write(output_file, avctx, &packet, 0, &count);
+        ret = decode_write(job, output_file, avctx, &packet, 0);
         if (ret)
             break;
 
@@ -478,15 +531,21 @@ static void *job_thread(void *arg) {
     av_log(avctx, AV_LOG_DEBUG, "flush video-->\n");
     packet.data = NULL;
     packet.size = 0;
-    ret = decode_write(output_file, avctx, &packet, 1, &count);
+    ret = decode_write(job, output_file, avctx, &packet, 1);
     if (ret < 0) {
         fprintf(stderr, "Error while flushing the decoder\n");
     }
     av_packet_unref(&packet);
     end_time = av_gettime();
-    job->frames = count;
-    if (count > 0 && (end_time - start_time) > 0)
-        job->fps = 1000000.f / ((end_time - start_time) / (count));
+    count = job->frames;
+    if (job->start_time == 0) {
+        job->start_time = start_time;
+    }
+    
+    if (count > 0 && (end_time - job->start_time) > 0) {
+        job->fps = (1000000.f * (count - job->first_read_frames)) / (end_time - job->start_time);
+        job->latency = job->start_time - start_time;
+    }
 
     if (g_dump_out && output_file) {
         fclose(output_file);
@@ -601,6 +660,8 @@ int main(int argc, char *argv[])
     char env_str[MAX_PATH_LEN];
 
     uint64_t sum_frames = 0;
+    uint64_t sum_latency = 0;
+    uint64_t mean_latency = 0;
     float sum_fps = 0.0;
     float mean_fps = 0.0;
     float max_fps = 0.0;
@@ -653,6 +714,7 @@ int main(int argc, char *argv[])
         is_av1 = 1;
         printf("file[%s] end with AV1\n", g_in_file);
     }
+    pthread_mutex_init(&cb_av_log_lock, NULL);
 
     fptrLog = log_callback_null;
     if (g_log_level) {
@@ -756,7 +818,7 @@ int main(int argc, char *argv[])
                 }
                 sum_frames += jobs[i][j][k]->frames;
                 sum_fps += jobs[i][j][k]->fps;
-                av_log(NULL, AV_LOG_INFO, "thread card:%2d,dev:%2d,session:%2d,frames:%5d, fps:%5.2f\n", i, j, k, jobs[i][j][k]->frames, jobs[i][j][k]->fps);
+                av_log(NULL, AV_LOG_INFO, "thread card:%2d,dev:%2d,session:%2d,frames:%5d, skip_frames:%5d, fps:%5.2f, latency:%u\n", i, j, k, jobs[i][j][k]->frames, jobs[i][j][k]->first_read_frames, jobs[i][j][k]->fps, jobs[i][j][k]->latency);
             }
             mean_fps = sum_fps / g_sessions;
             /*cal standard_deviation*/
@@ -766,13 +828,15 @@ int main(int argc, char *argv[])
             for (int k = 0; k < g_sessions; k++) {
                 diff = jobs[i][j][k]->fps - mean_fps;
                 variance += diff * diff;
+                sum_latency += jobs[i][j][k]->latency;
                if (jobs[i][j][k]) free(jobs[i][j][k]);
             }
             standard_deviation = sqrt(variance / g_sessions);
-
-            printf("card:%2d, dev:%2d, nsession:%2d, sf:%2d, standard deviation:%8.2f, mean_latency:0, max_fps:%8.2f, min_fps:%8.2f, mean_fps:%8.2f\n", i, j, g_sessions, g_frame_sf, standard_deviation, max_fps, min_fps, mean_fps);
+            mean_latency = sum_latency / g_sessions;
+            printf("card:%2d, dev:%2d, nsession:%2d, sf:%2d, standard deviation:%8.2f, mean_latency:%d, max_fps:%8.2f, min_fps:%8.2f, mean_fps:%8.2f\n", i, j, g_sessions, g_frame_sf, standard_deviation, mean_latency, max_fps, min_fps, mean_fps);
         }
     }
     av_log(NULL, AV_LOG_INFO, "main thread finish\n");
+    pthread_mutex_destroy(&cb_av_log_lock);
     return 0;
 }
