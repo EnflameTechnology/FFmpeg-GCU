@@ -163,6 +163,25 @@ static void print_frame(AVCodecContext *avctx, topscodecFrame_t *frame) {
   av_log(avctx, AV_LOG_DEBUG, "\t                             }\t\n");
 }
 
+static void sleep_wait(int *sleep_handle) {
+  if (*sleep_handle > 10) {
+    av_usleep(10 * 100);
+  } else if (*sleep_handle > 7) {
+    av_usleep(5 * 100);
+  } else if (*sleep_handle > 5) {
+    av_usleep(2 * 100);
+  } else if (*sleep_handle > 3) {
+    av_usleep(100);
+  } else {
+    av_usleep(10);
+  }
+  if (*sleep_handle > 15) {
+    *sleep_handle = 0;
+  } else {
+    (*sleep_handle)++;
+  }
+}
+
 static av_cold int topscodec_decode_init(AVCodecContext *avctx)
 {
     EFCodecDecContext_t *ctx            = NULL; 
@@ -773,6 +792,7 @@ static int topscodec_receive_frame(AVCodecContext *avctx, AVFrame *frame)
 {
     EFCodecDecContext_t *ctx;
     int ret;
+    int sleep_handle = 0;
 
     if (NULL == avctx || NULL == avctx->priv_data) {
         av_log(avctx, AV_LOG_ERROR, "Early error in topscodec_receive_frame\n");
@@ -889,7 +909,7 @@ static int topscodec_receive_frame(AVCodecContext *avctx, AVFrame *frame)
                             "topscodecDecSendStream failed. ret = %d\n", ret);
                     goto fail;
                 }
-                av_usleep(15);
+                sleep_wait(&sleep_handle);
             } while (ret == TOPSCODEC_ERROR_TIMEOUT);
         } else {
             av_log(avctx, AV_LOG_ERROR,

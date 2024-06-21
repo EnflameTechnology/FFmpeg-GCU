@@ -563,7 +563,7 @@ static void *job_thread(void *arg) {
     if (g_kill_flag) {
         SUICIDE()
     }
-    av_log(avctx, AV_LOG_INFO, "decode_EFC test finish, frames:%ld\n", count);
+    av_log(avctx, AV_LOG_INFO, "decode_topscodec test finish, frames:%ld\n", count);
     avcodec_free_context(&avctx);
     avformat_close_input(&input_ctx);
     av_buffer_unref(&hw_device_ctx);
