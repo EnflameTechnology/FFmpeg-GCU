@@ -27,6 +27,7 @@
 
 #ifndef AVCODEC_EF_TOPSCODEC_DEC_H
 #define AVCODEC_EF_TOPSCODEC_DEC_H
+#define MAX_FRAME_NUM 10
 
 typedef struct {
     AVClass *avclass;
@@ -88,6 +89,9 @@ typedef struct {
 
     AVPacket av_pkt;
     AVFrame  mid_frame;
+    AVFrame  *last_received_frame[MAX_FRAME_NUM];
+    int      idx_put; //for last_received_frame
+    int      idx_get; //for last_received_frame
 
     EFBuffer *ef_buf_frame;
     EFBuffer *ef_buf_pkt;

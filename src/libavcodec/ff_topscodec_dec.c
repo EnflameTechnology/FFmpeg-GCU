@@ -707,8 +707,15 @@ static av_cold int topscodec_decode_close(AVCodecContext *avctx)
 static int topscodec_recived_helper(AVCodecContext *avctx, AVFrame *avframe)
 {
     int ret = 0;
+    
     EFCodecDecContext_t *ctx = (EFCodecDecContext_t*)avctx->priv_data;
     av_frame_unref(avframe);
+
+    if (ctx->idx_put != ctx->idx_get) {
+        avframe = ctx->last_received_frame[ctx->idx_get];
+        ctx->idx_get = (ctx->idx_get + 1) % MAX_FRAME_NUM;
+        return 0;
+    }
     
     ret = ctx->topscodec_lib_ctx->lib_topscodecDecFrameMap(ctx->handle,
                                                 &ctx->ef_buf_frame->ef_frame);
@@ -852,6 +859,24 @@ static int topscodec_receive_frame(AVCodecContext *avctx, AVFrame *frame)
     if (ret != TOPSCODEC_SUCCESS) {
         if (ret == TOPSCODEC_ERROR_TIMEOUT) {
             do {
+                //last_received_frame array is not full
+                for (int i = 0; i < 25; i++) {
+                    if (ctx->idx_get - ctx->idx_put != 1 &&
+                        ctx->idx_get - ctx->idx_put != -(MAX_FRAME_NUM - 2)){
+                        ret = topscodec_recived_helper(avctx, 
+                                        ctx->last_received_frame[ctx->idx_put]);
+                        if (TOPSCODEC_SUCCESS == ret) {
+                            ctx->idx_put = (ctx->idx_put + 1) % MAX_FRAME_NUM;
+                            break;
+                        } else if (TOPSCODEC_ERROR_BUFFER_EMPTY == ret){ 
+                            //do nothing
+                            av_usleep(2);
+                        } else {
+                            goto fail;
+                        }
+                    }
+                }
+
                 av_log(avctx, AV_LOG_DEBUG,
                         "topscodecDecodeStream timeout,retry again!\n");
                 ret = ctx->topscodec_lib_ctx->lib_topscodecDecodeStream(
@@ -864,7 +889,7 @@ static int topscodec_receive_frame(AVCodecContext *avctx, AVFrame *frame)
                             "topscodecDecSendStream failed. ret = %d\n", ret);
                     goto fail;
                 }
-                av_usleep(5);
+                av_usleep(15);
             } while (ret == TOPSCODEC_ERROR_TIMEOUT);
         } else {
             av_log(avctx, AV_LOG_ERROR,
