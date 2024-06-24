@@ -92,6 +92,7 @@ static int g_in_port_num    = 0;
 static int g_out_port_num   = 0;
 static int g_skip_frames    = 1;
 static int g_is_av1         = 0;
+static int g_zero_copy      = 1;
 
 static const char *g_in_file  = NULL;
 static const char *g_out_file = NULL;
@@ -289,7 +290,6 @@ static int decode_write(job_args_t *job, FILE *outfile, AVCodecContext *avctx,
             job->first_read_frames = job->frames;
             job->start_time = av_gettime();
         }
-        av_log(avctx, AV_LOG_DEBUG, "capture frame:%ld\n", job->frames);
 
         if (g_dump_out && outfile) {    
             size = av_image_get_buffer_size(frame->format, frame->width,
@@ -365,12 +365,15 @@ static int decode_write(job_args_t *job, FILE *outfile, AVCodecContext *avctx,
             }
         }
 
-    fail:
+fail:
         av_frame_free(&frame);
         av_frame_free(&sw_frame);
         av_freep(&buffer);
-        if (ret < 0)
+        if (ret < 0) {
+            av_log(avctx, AV_LOG_ERROR, "thread:%d fail, ret=%d\n", job->job_name, ret);
             return ret;
+        } 
+        av_log(avctx, AV_LOG_DEBUG, "app capture frame:%ld\n", job->frames);
     } //while
     return 0;
 }
@@ -492,7 +495,9 @@ static void *job_thread(void *arg) {
     snprintf(tmp, sizeof(tmp), "%d", job->out_port_num);
     av_dict_set(&dec_opts, "out_port_num", tmp, 0);
 
-    av_dict_set(&dec_opts, "zero_copy", "1", 0);
+    memset(tmp, 0, sizeof(tmp));
+    snprintf(tmp, sizeof(tmp), "%d", g_zero_copy);
+    av_dict_set(&dec_opts, "zero_copy", tmp, 0);
 
     if ((ret = avcodec_open2(avctx, decoder, &dec_opts)) < 0) {
         fprintf(stderr, "Failed to open codec for stream #%d\n", video_stream);
@@ -575,8 +580,13 @@ static void *job_thread(void *arg) {
 static int parse_opt(int argc, char **argv) {
   int result;
 
-  while ((result = getopt(argc, argv, "c:n:d:m:s:i:o:y:l:k:f:b:p:z:")) != -1) {
+  while ((result = getopt(argc, argv, "a:c:n:d:m:s:i:o:y:l:k:f:b:p:z:")) != -1) {
     switch (result) {
+        case 'a':
+        printf("option=h, optopt=%c, optarg=%s\n", optopt, optarg);
+        g_zero_copy = atoi(optarg);
+        printf("g_zero_copy:%d\n", g_card_start);
+        break;
       case 'c':
         printf("option=h, optopt=%c, optarg=%s\n", optopt, optarg);
         g_card_start = atoi(optarg);
@@ -689,7 +699,7 @@ int main(int argc, char *argv[])
 
     parse_opt(argc, argv);
     if (g_in_file == NULL || g_out_file == NULL) {
-        printf("Usage: %s [-k kill_self 0/1] [-l loglevel0/1/2] [-f switch_frame] [-z skip_frames] [-b in_port_num] [-p out_port_num] [-c start_card_id] [-n end_card_id] [-d start_dev_id] [-m end_dev_id] [-s sessions] [-y write_out_file 0/1] -i <input file> -o <output file>\n", argv[0]);
+        printf("Usage: %s [-a zero_copy 1/0] [-k kill_self 0/1] [-l loglevel0/1/2] [-f switch_frame] [-z skip_frames] [-b in_port_num] [-p out_port_num] [-c start_card_id] [-n end_card_id] [-d start_dev_id] [-m end_dev_id] [-s sessions] [-y write_out_file 0/1] -i <input file> -o <output file>\n", argv[0]);
         printf("Example: %s -k 0 -l 2 -c 0 -n 4 -d 0 -m 8 -s 32 -y 0 -i input.h264 -o output.yuv\n", argv[0]);
         return -1;
     }
@@ -757,7 +767,8 @@ int main(int argc, char *argv[])
         for (int j = g_dev_start; j < g_dev_end; j++) {
             if (g_is_av1) {
                 if (j % 2 == 0) {
-                    j += 1;
+                    av_log(NULL, AV_LOG_INFO, "skip dev_id:%d\n", j);
+                    continue;
                 }
             }
             for (int k = 0; k < g_sessions; k++) {
@@ -802,7 +813,7 @@ int main(int argc, char *argv[])
         for (int j = g_dev_start; j < g_dev_end; j++) {
             if (g_is_av1) {
                 if (j % 2 == 0) {
-                    j += 1;
+                    continue;
                 }
             }
             for (int k = 0; k < g_sessions; k++) {
@@ -818,7 +829,7 @@ int main(int argc, char *argv[])
         for (int j = g_dev_start; j < g_dev_end; j++) {
             if (g_is_av1) {
                 if (j % 2 == 0) {
-                    j += 1;
+                    continue;
                 }
             }
             sum_frames = 0;

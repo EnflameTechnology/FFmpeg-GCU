@@ -492,6 +492,10 @@ static av_cold int topscodec_decode_init(AVCodecContext *avctx)
     ctx->recv_outport_eos   = 0;
     ctx->first_packet       = 1;
 
+    for(int i = 0; i < MAX_FRAME_NUM; i++) {
+        ctx->last_received_frame[i] = av_frame_alloc();
+    }
+
     /*
     * At this moment, if the demuxer does not set this value 
     * (avctx->field_order == UNKNOWN),
@@ -717,6 +721,12 @@ static av_cold int topscodec_decode_close(AVCodecContext *avctx)
 
     if (ctx->hwframe)  av_buffer_unref(&ctx->hwframe);
     if (ctx->hwdevice) av_buffer_unref(&ctx->hwdevice);
+
+    for(int i = 0; i < MAX_FRAME_NUM; i++) {
+        if (ctx->last_received_frame[i]) {
+            av_frame_free(&ctx->last_received_frame[i]);
+        }
+    }
     ctx->decoder_init_flag = 0;
     av_log(avctx, AV_LOG_DEBUG,
             "Thread, %lu, decode close \n", (long unsigned)pthread_self());
@@ -731,8 +741,11 @@ static int topscodec_recived_helper(AVCodecContext *avctx, AVFrame *avframe)
     av_frame_unref(avframe);
 
     if (ctx->idx_put != ctx->idx_get) {
-        avframe = ctx->last_received_frame[ctx->idx_get];
+        av_frame_ref(avframe, ctx->last_received_frame[ctx->idx_get]);
+        av_frame_unref(ctx->last_received_frame[ctx->idx_get]);
         ctx->idx_get = (ctx->idx_get + 1) % MAX_FRAME_NUM;
+        av_log(avctx, AV_LOG_DEBUG, "Get frame ,get:%d, put:%d\n", 
+                ctx->idx_get, ctx->idx_put);
         return 0;
     }
     
@@ -746,11 +759,13 @@ static int topscodec_recived_helper(AVCodecContext *avctx, AVFrame *avframe)
             av_log(avctx, AV_LOG_DEBUG,"----EOS -----\n");
             ctx->recv_outport_eos = 1;
             return AVERROR_EOF;
-        } 
+        }
+        av_log(avctx, AV_LOG_DEBUG, "topscodecDecFrameMap success\n");
     } else if (TOPSCODEC_ERROR_BUFFER_EMPTY == ret){
         av_log(avctx, AV_LOG_DEBUG, "TOPSCODEC_ERROR_BUFFER_EMPTY\n");
         return AVERROR(EAGAIN);
     } else {
+        av_log(avctx, AV_LOG_ERROR, "topscodecDecFrameMap failed, ret(%d)\n", ret);
         return AVERROR(EPERM);
     }
     
@@ -791,7 +806,7 @@ static int topscodec_recived_helper(AVCodecContext *avctx, AVFrame *avframe)
 static int topscodec_receive_frame(AVCodecContext *avctx, AVFrame *frame)
 {
     EFCodecDecContext_t *ctx;
-    int ret;
+    int ret, ret2;
     int sleep_handle = 0;
 
     if (NULL == avctx || NULL == avctx->priv_data) {
@@ -841,32 +856,22 @@ static int topscodec_receive_frame(AVCodecContext *avctx, AVFrame *frame)
             p.pts = 0;
             ff_topscodec_avpkt_to_efbuf(&p, ctx->ef_buf_pkt);
             print_stream(avctx, &ctx->ef_buf_pkt->ef_pkt);
-            ret = ctx->topscodec_lib_ctx->lib_topscodecDecodeStream(ctx->handle,
-                                &ctx->ef_buf_pkt->ef_pkt, 0);/*timeout is 0*/
-            if (ret != TOPSCODEC_SUCCESS) {
-                if (ret == TOPSCODEC_ERROR_TIMEOUT) {
-                    do {
+            do {
+                ret = ctx->topscodec_lib_ctx->lib_topscodecDecodeStream(
+                                    ctx->handle,
+                                    &ctx->ef_buf_pkt->ef_pkt, 0);/*timeout is 0*/
+                if (ret != TOPSCODEC_SUCCESS) {
+                    if (ret == TOPSCODEC_ERROR_TIMEOUT) {
                         av_log(avctx, AV_LOG_DEBUG,
-                                "topscodecDecodeStream timeout,retry again!\n");
-                        ret = ctx->topscodec_lib_ctx->lib_topscodecDecodeStream(
-                                                    ctx->handle,
-                                                    &ctx->ef_buf_pkt->ef_pkt,
-                                                    0);
-                        if (ret != TOPSCODEC_SUCCESS &&
-                            ret != TOPSCODEC_ERROR_TIMEOUT) {
-                            av_log(avctx, AV_LOG_ERROR,
-                                    "topscodecDecSendStream failed. ret = %d\n",
-                                    ret);
-                            goto fail;
-                        }
-                        av_usleep(5);
-                    } while (ret == TOPSCODEC_ERROR_TIMEOUT);
-                } else {
-                    av_log(avctx, AV_LOG_ERROR,
+                            "topscodecDecodeStream timeout,retry again!\n");
+                        sleep_wait(&sleep_handle);
+                    } else {
+                        av_log(avctx, AV_LOG_ERROR,
                             "topscodecDecSendStream failed. ret = %d\n", ret);
-                    goto fail;
+                        goto fail;
+                    }
                 }
-            }
+            } while(ret == TOPSCODEC_ERROR_TIMEOUT);
         }
         ctx->first_packet = 0;
     }
@@ -874,49 +879,45 @@ static int topscodec_receive_frame(AVCodecContext *avctx, AVFrame *frame)
     ff_topscodec_avpkt_to_efbuf(&ctx->av_pkt, ctx->ef_buf_pkt);
     ctx->total_packet_count++;
     print_stream(avctx, &ctx->ef_buf_pkt->ef_pkt);
-    ret = ctx->topscodec_lib_ctx->lib_topscodecDecodeStream(ctx->handle,
-                                &ctx->ef_buf_pkt->ef_pkt, 0);/*timeout is 0*/
-    if (ret != TOPSCODEC_SUCCESS) {
-        if (ret == TOPSCODEC_ERROR_TIMEOUT) {
-            do {
+    do {
+        ret = ctx->topscodec_lib_ctx->lib_topscodecDecodeStream(ctx->handle,
+                                    &ctx->ef_buf_pkt->ef_pkt, 0);/*timeout is 0*/
+        if (ret != TOPSCODEC_SUCCESS) {
+            if (ret == TOPSCODEC_ERROR_TIMEOUT) {
                 //last_received_frame array is not full
-                for (int i = 0; i < 25; i++) {
-                    if (ctx->idx_get - ctx->idx_put != 1 &&
-                        ctx->idx_get - ctx->idx_put != -(MAX_FRAME_NUM - 2)){
-                        ret = topscodec_recived_helper(avctx, 
-                                        ctx->last_received_frame[ctx->idx_put]);
-                        if (TOPSCODEC_SUCCESS == ret) {
-                            ctx->idx_put = (ctx->idx_put + 1) % MAX_FRAME_NUM;
-                            break;
-                        } else if (TOPSCODEC_ERROR_BUFFER_EMPTY == ret){ 
-                            //do nothing
-                            av_usleep(2);
-                        } else {
-                            goto fail;
-                        }
+                AVFrame *tmp = ctx->last_received_frame[ctx->idx_put];
+                if (ctx->idx_get - ctx->idx_put != 1 &&
+                    ctx->idx_get - ctx->idx_put != -(MAX_FRAME_NUM - 2)){
+                    ret2 = topscodec_recived_helper(avctx, tmp);
+                    if (0 == ret2) {
+                        ctx->idx_put = (ctx->idx_put + 1) % MAX_FRAME_NUM;
+                        av_log(avctx, AV_LOG_DEBUG,
+                                "add frame to queue,put:%d,get:%d!\n",
+                                ctx->idx_put, ctx->idx_get);
+                    } else if (AVERROR(EAGAIN) == ret2) { 
+                        //do nothing
+                        av_usleep(2);
+                        av_log(avctx, AV_LOG_DEBUG,
+                                "TOPSCODEC_ERROR_BUFFER_EMPTY22\n");
+                    } else {
+                        av_log(avctx, AV_LOG_ERROR,
+                            "topscodec_recived_helper failed. ret = %d\n",
+                                ret2);
+                        goto fail;
                     }
                 }
-
                 av_log(avctx, AV_LOG_DEBUG,
-                        "topscodecDecodeStream timeout,retry again!\n");
-                ret = ctx->topscodec_lib_ctx->lib_topscodecDecodeStream(
-                                                ctx->handle, 
-                                                &ctx->ef_buf_pkt->ef_pkt,
-                                                0);
-                if (ret != TOPSCODEC_SUCCESS &&
-                    ret != TOPSCODEC_ERROR_TIMEOUT) {
-                    av_log(avctx, AV_LOG_ERROR,
-                            "topscodecDecSendStream failed. ret = %d\n", ret);
-                    goto fail;
-                }
-                sleep_wait(&sleep_handle);
-            } while (ret == TOPSCODEC_ERROR_TIMEOUT);
+                            "topscodecDecodeStream timeout,retry again!\n");
+                sleep_wait(&sleep_handle); 
+            } else {
+                av_log(avctx, AV_LOG_ERROR,
+                        "topscodecDecSendStream failed. ret = %d\n", ret);
+                goto fail;
+            }
         } else {
-            av_log(avctx, AV_LOG_ERROR,
-                    "topscodecDecSendStream failed. ret = %d\n", ret);
-            goto fail;
-        }
-    }
+            av_log(avctx, AV_LOG_DEBUG, "topscodecDecodeStream success\n");
+        }    
+    } while(ret == TOPSCODEC_ERROR_TIMEOUT);
 
     if (!ctx->av_pkt.size) {
         ctx->draining = 1;

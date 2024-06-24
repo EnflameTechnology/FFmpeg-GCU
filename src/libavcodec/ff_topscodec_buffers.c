@@ -92,12 +92,17 @@ enum AVColorTransferCharacteristic topscodec_get_color_trc(const EFBuffer *buf)
 
 static void topscodec_free_buffer(void *opaque, uint8_t *unused)
 {
+    int ret;
     EFBuffer* efbuf = opaque;
     EFCodecDecContext_t *ctx = (EFCodecDecContext_t*)efbuf->ef_context;
 
     if (atomic_fetch_sub(&efbuf->context_refcount, 1) == 1) {
-        ctx->topscodec_lib_ctx->lib_topscodecDecFrameUnmap(ctx->handle, 
+        ret = ctx->topscodec_lib_ctx->lib_topscodecDecFrameUnmap(ctx->handle, 
                                                         &efbuf->ef_frame);
+        if (ret != 0)
+            av_log(efbuf->avctx, AV_LOG_ERROR, "topscodecDecFrameUnmap FAILED.\n");
+        else
+            av_log(efbuf->avctx, AV_LOG_DEBUG, "topscodecDecFrameUnmap SUCCESS.\n");
     }
 }
 
@@ -166,6 +171,9 @@ int ff_topscodec_avframe_to_efbuf(const AVFrame *avframe, EFBuffer *efbuf)
         /*for encodeing, only support yuv420p*/
         nBytes = efbuf->ef_frame.plane[i].stride * 
                     efbuf->ef_frame.height * (i ? 1.0 / 2 : 1);
+        av_assert0(data);
+        av_assert0(avframe->data[i]);
+        av_assert0(nBytes > 0);
         tops_ret = topsruntime->lib_topsMemcpyHtoD(data,
                                                     avframe->data[i], nBytes);
         if (tops_ret != topsSuccess) {
@@ -263,7 +271,9 @@ int ff_topscodec_efbuf_to_avframe(const EFBuffer *efbuf, AVFrame *avframe)
                 av_frame_unref(avframe);
                 return AVERROR_BUG;
             }
-
+            av_assert0(planesizes[i] > 0);
+            av_assert0(data[i]);
+            av_assert0(avframe->data[i]);
             ret = topsruntime->lib_topsMemcpyDtoD(avframe->data[i],
                                     data[i],
                                     planesizes[i]);
@@ -280,7 +290,11 @@ int ff_topscodec_efbuf_to_avframe(const EFBuffer *efbuf, AVFrame *avframe)
                     "d2d: host %p -> dev %p, size %lu\n",
                     data[i], avframe->data[i], planesizes[i]);
         }//for
-        topscodec->lib_topscodecDecFrameUnmap(ctx->handle, &efbuf->ef_frame);
+       ret = topscodec->lib_topscodecDecFrameUnmap(ctx->handle, &efbuf->ef_frame);
+       if (ret != 0)
+            av_log(log_ctx, AV_LOG_ERROR, "topscodecDecFrameUnmap FAILED.\n");
+        else
+            av_log(log_ctx, AV_LOG_DEBUG, "topscodecDecFrameUnmap SUCCESS.\n");
     } else {/*zero copy*/
         for (int i = 0; i < efbuf->ef_frame.plane_num; i++){
             ret = topscodec_buf_to_bufref(efbuf, i, &avframe->buf[i], 
@@ -395,7 +409,7 @@ int ff_topscodec_avpkt_to_efbuf(const AVPacket *avpkt, EFBuffer *efbuf)
 
     data = (void*)ctx->stream_addr;
     
-    if (avpkt->size >= 0 ){
+    if (avpkt->size > 0 && avpkt->data && data){
         // memcpy(data, avpkt->data, avpkt->size);
         tops_ret = topsruntimes->lib_topsMemcpyHtoD(data, avpkt->data, 
                                                     avpkt->size);
