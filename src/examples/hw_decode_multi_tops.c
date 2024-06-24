@@ -60,6 +60,7 @@ static char            logBuffer[LOG_BUF_SIZE]           = {0};
 static pthread_mutex_t cb_av_log_lock;
 static uint8_t g_receive[MAX_CARD_ID][MAX_DEV_ID][MAX_SESSIONS] = {0};
 static uint8_t g_start[MAX_CARD_ID][MAX_DEV_ID][MAX_SESSIONS]   = {0};
+static uint8_t g_end[MAX_CARD_ID][MAX_DEV_ID][MAX_SESSIONS]     = {0};
 
 typedef struct job_args {
     int card_id;
@@ -93,6 +94,7 @@ static int g_out_port_num   = 0;
 static int g_skip_frames    = 1;
 static int g_is_av1         = 0;
 static int g_zero_copy      = 1;
+static int g_sync           = 1;
 
 static const char *g_in_file  = NULL;
 static const char *g_out_file = NULL;
@@ -112,6 +114,7 @@ static void print_globle_var(void) {
     printf("g_skip_frames:%d\n", g_skip_frames);
     printf("g_in_port_num:%d\n", g_in_port_num);
     printf("g_out_port_num:%d\n", g_out_port_num);
+    printf("g_zero_copy:%d\n", g_zero_copy);
 }
 
 static int end_with(const char *str, const char *suffix) {
@@ -195,45 +198,57 @@ static enum AVPixelFormat get_hw_format(AVCodecContext *ctx,
     return AV_PIX_FMT_NONE;
 }
 
-static void codec_start_synchoronize(int card, int dev) {
-    int index = 0;
-    av_log(NULL, AV_LOG_INFO, "codec_start_synchoronize\n");
-    for(int card = g_card_start; card < g_card_end; card++) {
-        for(int dev = g_dev_start; dev < g_dev_end; dev++) {
-            if(g_is_av1 == 1 && dev % 2 == 0)
-                continue;
-            index = 0;
-            while (index < g_sessions) {
-                if (g_start[card][dev][index] != 1) {
-                    av_usleep(10);
-                    index = 0;
-                    continue;
-                }
-                index++;
-            }
-        }
-    }
+typedef enum Sync_type {
+    SYNC_START,
+    SYNC_FRAME,
+    SYNC_END
+} Sync_type;
 
+static const char* Sync_type2str(Sync_type type) {
+    switch(type) {
+        case SYNC_START:
+            return "SYNC_START";
+        case SYNC_FRAME:
+            return "SYNC_FRAME";
+        case SYNC_END:
+            return "SYNC_END";
+        default:
+            return "UNKNOWN";
+    }
 }
 
-static void first_frame_synchoronize(int card, int dev) {
+static void synchoronize(Sync_type type) {
     int index = 0;
-    av_log(NULL, AV_LOG_INFO, "first_frame_synchoronize\n");
+    av_log(NULL, AV_LOG_INFO, "synchoronize:%s\n", Sync_type2str(type));
     for(int card = g_card_start; card < g_card_end; card++) {
         for(int dev = g_dev_start; dev < g_dev_end; dev++) {
             if(g_is_av1 == 1 && dev % 2 == 0)
                 continue;
             index = 0;
             while (index < g_sessions) {
-                if (g_receive[card][dev][index] != 1) {
-                  av_usleep(10);
-                  index = 0;
-                  continue;
+                if (type == SYNC_START) {
+                    if (g_start[card][dev][index] != 1) {
+                        av_usleep(10);
+                        index = 0;
+                        continue;
+                    }
+                } else if (type == SYNC_FRAME) {
+                    if (g_receive[card][dev][index] != 1) {
+                        av_usleep(10);
+                        index = 0;
+                        continue;
+                    }
+                } else if (type == SYNC_END) {
+                    if (g_end[card][dev][index] != 1) {
+                        av_usleep(10);
+                        index = 0;
+                        continue;
+                    }
                 }
                 index++;
             }
-        }  
-    }
+        } //for dev
+    } //for card
 }
 
 static int decode_write(job_args_t *job, FILE *outfile, AVCodecContext *avctx, 
@@ -251,7 +266,7 @@ static int decode_write(job_args_t *job, FILE *outfile, AVCodecContext *avctx,
 
     ret = avcodec_send_packet(avctx, packet);
     if (ret < 0) {
-        av_log(avctx, AV_LOG_ERROR, "Error during decoding.\n");
+        av_log(avctx, AV_LOG_ERROR, "Error during avcodec_send_packet.\n");
         return ret;
     }
 
@@ -278,15 +293,19 @@ static int decode_write(job_args_t *job, FILE *outfile, AVCodecContext *avctx,
                 return 0;
             }           
         } else if (ret < 0) {
-            av_log(avctx, AV_LOG_ERROR, "Error while decoding, ret=%d\n", ret);
+            av_log(avctx, AV_LOG_ERROR,
+                    "Error while avcodec_receive_frame, ret=%d\n", ret);
             goto fail;
         }
 
         job->frames++;
-        if (job->frames == g_skip_frames && g_receive[job->card_id][job->dev_id][job->session_id] == 0) {
+        if (job->frames == g_skip_frames &&
+                g_receive[job->card_id][job->dev_id][job->session_id] == 0) {
             g_receive[job->card_id][job->dev_id][job->session_id] = 1;
-            printf("card:%d, dev:%d, session:%d, first frame received:%d\n", job->card_id, job->dev_id, job->session_id, job->frames);
-            first_frame_synchoronize(job->card_id, job->dev_id);
+            printf("card:%d, dev:%d, session:%d, first frame received:%d\n",
+                    job->card_id, job->dev_id, job->session_id, job->frames);
+            if (g_sync)
+                synchoronize(SYNC_FRAME);
             job->first_read_frames = job->frames;
             job->start_time = av_gettime();
         }
@@ -370,7 +389,8 @@ fail:
         av_frame_free(&sw_frame);
         av_freep(&buffer);
         if (ret < 0) {
-            av_log(avctx, AV_LOG_ERROR, "thread:%d fail, ret=%d\n", job->job_name, ret);
+            av_log(avctx, AV_LOG_ERROR, "thread:%d fail, ret=%d\n",
+                                                    job->job_name, ret);
             return ret;
         } 
         av_log(avctx, AV_LOG_DEBUG, "app capture frame:%ld\n", job->frames);
@@ -403,6 +423,7 @@ static void *job_thread(void *arg) {
     uint64_t   end_time        = 0;
 
     int        video_stream    = 0;
+    int        skip            = 0;
     
     const char *dev_type       = NULL;
     const char *tmp_name       = NULL;
@@ -515,14 +536,16 @@ static void *job_thread(void *arg) {
     if (g_dump_out == 1) {
         output_file = fopen(job->out_file, "w+");
         if (!output_file) {
-            fprintf(stderr, "Could not open destination file %s\n", job->out_file);
+            fprintf(stderr, "Could not open destination file %s\n",
+                                                            job->out_file);
             return NULL;
         }
         av_log(avctx, AV_LOG_DEBUG, "open output file %s\n", job->out_file);
     }
     // sychoronize sessions
     g_start[job->card_id][job->dev_id][job->session_id] = 1;
-    codec_start_synchoronize(job->card_id, job->dev_id);
+    if (g_sync)
+        synchoronize(SYNC_START);
 
     job->frames = 0;
     job->first_read_frames = 0;
@@ -558,7 +581,8 @@ static void *job_thread(void *arg) {
     }
     
     if (count > 0 && (end_time - job->start_time) > 0) {
-        job->fps = (1000000.f * (count - job->first_read_frames)) / (end_time - job->start_time);
+        skip = job->first_read_frames;
+        job->fps = (1000000.f * (count - skip)) / (end_time - job->start_time);
         job->latency = job->start_time - start_time;
     }
 
@@ -568,7 +592,10 @@ static void *job_thread(void *arg) {
     if (g_kill_flag) {
         SUICIDE()
     }
-    av_log(avctx, AV_LOG_INFO, "decode_topscodec test finish, frames:%ld\n", count);
+    g_end[job->card_id][job->dev_id][job->session_id] = 1;
+    if (g_sync)
+        synchoronize(SYNC_END);
+    av_log(avctx, AV_LOG_INFO, "decode_topscodec finish, frames:%ld\n", count);
     avcodec_free_context(&avctx);
     avformat_close_input(&input_ctx);
     av_buffer_unref(&hw_device_ctx);
@@ -580,12 +607,18 @@ static void *job_thread(void *arg) {
 static int parse_opt(int argc, char **argv) {
   int result;
 
-  while ((result = getopt(argc, argv, "a:c:n:d:m:s:i:o:y:l:k:f:b:p:z:")) != -1) {
+  while ((result = 
+                getopt(argc, argv, "a:e:c:n:d:m:s:i:o:y:l:k:f:b:p:z:")) != -1) {
     switch (result) {
         case 'a':
         printf("option=h, optopt=%c, optarg=%s\n", optopt, optarg);
         g_zero_copy = atoi(optarg);
         printf("g_zero_copy:%d\n", g_card_start);
+        break;
+        case 'e':
+        printf("option=h, optopt=%c, optarg=%s\n", optopt, optarg);
+        g_sync = atoi(optarg);
+        printf("g_sync:%d\n", g_card_start);
         break;
       case 'c':
         printf("option=h, optopt=%c, optarg=%s\n", optopt, optarg);
@@ -699,8 +732,23 @@ int main(int argc, char *argv[])
 
     parse_opt(argc, argv);
     if (g_in_file == NULL || g_out_file == NULL) {
-        printf("Usage: %s [-a zero_copy 1/0] [-k kill_self 0/1] [-l loglevel0/1/2] [-f switch_frame] [-z skip_frames] [-b in_port_num] [-p out_port_num] [-c start_card_id] [-n end_card_id] [-d start_dev_id] [-m end_dev_id] [-s sessions] [-y write_out_file 0/1] -i <input file> -o <output file>\n", argv[0]);
-        printf("Example: %s -k 0 -l 2 -c 0 -n 4 -d 0 -m 8 -s 32 -y 0 -i input.h264 -o output.yuv\n", argv[0]);
+        printf("Usage: %s [-a zero_copy 1/0] "
+                            "[-e sync 1/0] "
+                            "[-k kill_self 0/1] "
+                            "[-l loglevel0/1/2] "
+                            "[-f switch_frame] "
+                            "[-z skip_frames] "
+                            "[-b in_port_num] "
+                            "[-p out_port_num] "
+                            "[-c start_card_id] "
+                            "[-n end_card_id] "
+                            "[-d start_dev_id] "
+                            "[-m end_dev_id] "
+                            "[-s sessions] "
+                            "[-y write_out_file 0/1] "
+                            "-i <input file> -o <output file>\n", argv[0]);
+        printf("Example: %s -k 0 -l 2 -c 0 -n 4 -d 0 -m 8 -s 32 -y 0 "
+                                    "-i input.h264 -o output.yuv\n", argv[0]);
         return -1;
     }
     print_globle_var();
@@ -788,12 +836,16 @@ int main(int argc, char *argv[])
                 path = dirname(g_out_file_copy1);
                 strncpy(g_out_file_copy2, g_out_file, sizeof(g_out_file_copy2));
                 file = basename(g_out_file_copy2);
-                snprintf(name, sizeof(name), "%s/card%d_dev%d_session%d_%s", path, i, j, k, file);
+                snprintf(name, sizeof(name), "%s/card%d_dev%d_session%d_%s",
+                                                        path, i, j, k, file);
                 //rename outfile's name
-                memset(jobs[i][j][k]->out_file, 0, sizeof(jobs[i][j][k]->out_file));
+                memset(jobs[i][j][k]->out_file, 0,
+                                            sizeof(jobs[i][j][k]->out_file));
                 memcpy(jobs[i][j][k]->out_file, name, strlen(name));
                 av_log(NULL, AV_LOG_INFO, "out file name: %s\n", name);
-                ret = pthread_create(threads[i][j][k], NULL, job_thread, jobs[i][j][k]);
+                ret = pthread_create(threads[i][j][k], NULL,
+                                        job_thread,
+                                        jobs[i][j][k]);
                 if (ret != 0) {
                     fprintf(stderr, "pthread_create failed, ret=%d\n", ret);
                     return -1;
@@ -801,7 +853,8 @@ int main(int argc, char *argv[])
                 memset(name, 0, sizeof(name));
                 snprintf(name, sizeof(name), "card%d_dev%d_session%d", i, j, k);
                 // pthread_setname_np(*threads[i][j][k], name);
-                memset(jobs[i][j][k]->job_name, 0, sizeof(jobs[i][j][k]->job_name));
+                memset(jobs[i][j][k]->job_name, 0,
+                                            sizeof(jobs[i][j][k]->job_name));
                 memcpy(jobs[i][j][k]->job_name, name, strlen(name));
                 av_log(NULL, AV_LOG_INFO, "create thread %s success.\n", name);
             }
@@ -819,7 +872,8 @@ int main(int argc, char *argv[])
             for (int k = 0; k < g_sessions; k++) {
                 pthread_join(*threads[i][j][k], NULL);
                 if (threads[i][j][k]) free(threads[i][j][k]);
-                av_log(NULL, AV_LOG_INFO, "thread join [%s] success\n", jobs[i][j][k]->job_name);
+                av_log(NULL, AV_LOG_INFO, "thread join [%s] success\n",
+                                                    jobs[i][j][k]->job_name);
             }
         }
     }
@@ -849,7 +903,20 @@ int main(int argc, char *argv[])
                 sum_frames += jobs[i][j][k]->frames;
                 sum_fps += jobs[i][j][k]->fps;
                 sum_skip_frames += jobs[i][j][k]->first_read_frames;
-                av_log(NULL, AV_LOG_INFO, "thread card:%2d,dev:%2d,session:%2d,frames:%5d, skip_frames:%5d, fps:%5.2f, latency:%u\n", i, j, k, jobs[i][j][k]->frames, jobs[i][j][k]->first_read_frames, jobs[i][j][k]->fps, jobs[i][j][k]->latency);
+                av_log(NULL, AV_LOG_INFO, "thread card:%2d, "
+                                          "dev:%2d, "
+                                          "session:%2d, "
+                                          "frames:%5d, "
+                                          "skip_frames:%5d, "
+                                          "fps:%5.2f, "
+                                          "latency:%u\n", 
+                                          i, 
+                                          j, 
+                                          k, 
+                                          jobs[i][j][k]->frames, 
+                                          jobs[i][j][k]->first_read_frames, 
+                                          jobs[i][j][k]->fps, 
+                                          jobs[i][j][k]->latency);
             }
             mean_fps = sum_fps / g_sessions;
             mean_skip_frames = sum_skip_frames / g_sessions;
@@ -865,7 +932,26 @@ int main(int argc, char *argv[])
             }
             standard_deviation = sqrt(variance / g_sessions);
             mean_latency = sum_latency / g_sessions;
-            printf("card:%2d, dev:%2d, nsession:%2d, sf:%2d,  skip_frames:%5d, standard deviation:%8.2f, mean_latency:%d, max_fps:%8.2f, min_fps:%8.2f, mean_fps:%8.2f\n", i, j, g_sessions, g_frame_sf, mean_skip_frames, standard_deviation, mean_latency, max_fps, min_fps, mean_fps);
+            printf("card:%2d, "
+                    "dev:%2d, "
+                    "nsession:%2d, "
+                    "sf:%2d,  "
+                    "skip_frames:%5d, "
+                    "standard deviation:%8.2f, "
+                    "mean_latency:%d, "
+                    "max_fps:%8.2f, "
+                    "min_fps:%8.2f, "
+                    "mean_fps:%8.2f\n", 
+                    i,
+                    j, 
+                    g_sessions, 
+                    g_frame_sf, 
+                    mean_skip_frames, 
+                    standard_deviation, 
+                    mean_latency, 
+                    max_fps, 
+                    min_fps, 
+                    mean_fps);
         }
     }
     av_log(NULL, AV_LOG_INFO, "main thread finish\n");
