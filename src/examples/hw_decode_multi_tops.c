@@ -73,7 +73,9 @@ typedef struct job_args {
     float fps;
     int frames;
     int first_read_frames;
+    int before_eos_frames;
     uint64_t start_time;
+    uint64_t end_time;
     uint64_t latency;
     char out_file[MAX_PATH_LEN];
     char job_name[MAX_PATH_LEN];
@@ -115,6 +117,7 @@ static void print_globle_var(void) {
     printf("g_in_port_num:%d\n", g_in_port_num);
     printf("g_out_port_num:%d\n", g_out_port_num);
     printf("g_zero_copy:%d\n", g_zero_copy);
+    printf("g_sync:%d\n", g_sync);
 }
 
 static int end_with(const char *str, const char *suffix) {
@@ -421,6 +424,7 @@ static void *job_thread(void *arg) {
     int64_t     count          = 0;
     uint64_t   start_time      = 0;
     uint64_t   end_time        = 0;
+    uint64_t   elapsed         = 0;
 
     int        video_stream    = 0;
     int        skip            = 0;
@@ -564,7 +568,8 @@ static void *job_thread(void *arg) {
 
         av_packet_unref(&packet);
     }
-
+    job->end_time = av_gettime();
+    job->before_eos_frames = job->frames;
     /* flush the decoder */
     av_log(avctx, AV_LOG_DEBUG, "flush video-->\n");
     packet.data = NULL;
@@ -575,14 +580,21 @@ static void *job_thread(void *arg) {
     }
     av_packet_unref(&packet);
     end_time = av_gettime();
-    count = job->frames;
+    
     if (job->start_time == 0) {
         job->start_time = start_time;
     }
+
+    if (job->before_eos_frames == 0) {
+        job->before_eos_frames = job->frames;
+        job->end_time = end_time;
+    }
+    count = job->before_eos_frames;
     
     if (count > 0 && (end_time - job->start_time) > 0) {
         skip = job->first_read_frames;
-        job->fps = (1000000.f * (count - skip)) / (end_time - job->start_time);
+        elapsed = job->end_time - job->start_time;
+        job->fps = (1000000.f * (count - skip)) / elapsed;
         job->latency = job->start_time - start_time;
     }
 
@@ -595,7 +607,7 @@ static void *job_thread(void *arg) {
     g_end[job->card_id][job->dev_id][job->session_id] = 1;
     if (g_sync)
         synchoronize(SYNC_END);
-    av_log(avctx, AV_LOG_INFO, "decode_topscodec finish, frames:%ld\n", count);
+    av_log(avctx, AV_LOG_INFO, "decode finish, frames:%ld\n", job->frames);
     avcodec_free_context(&avctx);
     avformat_close_input(&input_ctx);
     av_buffer_unref(&hw_device_ctx);
