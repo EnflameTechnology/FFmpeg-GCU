@@ -224,12 +224,12 @@ int ff_topscodec_efbuf_to_avframe(const EFBuffer *efbuf, AVFrame *avframe)
     if (!ctx->zero_copy) {/*Not support yet*/
         ret = av_image_fill_linesizes(linesizes, avframe->format, 
                                         avframe->width);
-        if (ret < 0){
+        if (ret < 0) {
             av_log(log_ctx, AV_LOG_ERROR,"av_image_fill_plane_sizes failed.\n");
             return AVERROR_BUG;
         }
                 
-        for (int i = 0; i < 4; i++){
+        for (int i = 0; i < 4; i++) {
             linesizes1[i] = linesizes[i];
             data[i] = (uint8_t*)efbuf->ef_frame.plane[i].dev_addr;
             av_log(log_ctx, AV_LOG_DEBUG, 
@@ -238,13 +238,13 @@ int ff_topscodec_efbuf_to_avframe(const EFBuffer *efbuf, AVFrame *avframe)
 
         ret = av_image_fill_plane_sizes(planesizes, avframe->format,
                                         avframe->height, linesizes1);
-        if (ret < 0){
+        if (ret < 0) {
             av_log(log_ctx, AV_LOG_ERROR,"av_image_fill_plane_sizes failed.\n");
             return AVERROR_BUG;
         }
 
         if (av_pix_fmt_count_planes(avframe->format) != 
-                                    efbuf->ef_frame.plane_num){
+                                    efbuf->ef_frame.plane_num) {
             av_log(log_ctx, AV_LOG_ERROR,
                     "pix:%s,efbuf plane [%d]is not suitable for ffmpeg[%d].\n", 
                     av_get_pix_fmt_name(avframe->format),
@@ -257,7 +257,7 @@ int ff_topscodec_efbuf_to_avframe(const EFBuffer *efbuf, AVFrame *avframe)
 
         for (int i = 0; i < efbuf->ef_frame.plane_num; i++) {
             avframe->linesize[i] = efbuf->ef_frame.plane[i].stride;
-            if (avframe->linesize[i] != linesizes[i]){
+            if (avframe->linesize[i] != linesizes[i]) {
                 av_log(log_ctx, AV_LOG_ERROR,
                         "linesize[%d] is errefbuf linesize:%d,av linesize:%d\n",
                         i, avframe->linesize[i], linesizes[i]);
@@ -284,6 +284,7 @@ int ff_topscodec_efbuf_to_avframe(const EFBuffer *efbuf, AVFrame *avframe)
                 av_log(ctx, AV_LOG_ERROR,
                         "topsMemcpyDtoD error occur, func: %s, line: %d\n",
                         __func__, __LINE__);
+                av_frame_unref(avframe);
                 return AVERROR_BUG;
             }
             av_log(log_ctx, AV_LOG_DEBUG, 
@@ -291,10 +292,12 @@ int ff_topscodec_efbuf_to_avframe(const EFBuffer *efbuf, AVFrame *avframe)
                     data[i], avframe->data[i], planesizes[i]);
         }//for
        ret = topscodec->lib_topscodecDecFrameUnmap(ctx->handle, &efbuf->ef_frame);
-       if (ret != 0)
+       if (ret != 0) {
             av_log(log_ctx, AV_LOG_ERROR, "topscodecDecFrameUnmap FAILED.\n");
-        else
-            av_log(log_ctx, AV_LOG_DEBUG, "topscodecDecFrameUnmap SUCCESS.\n");
+            av_frame_unref(avframe);
+            return AVERROR_BUG;
+       }
+        av_log(log_ctx, AV_LOG_DEBUG, "topscodecDecFrameUnmap SUCCESS.\n");
     } else {/*zero copy*/
         for (int i = 0; i < efbuf->ef_frame.plane_num; i++){
             ret = topscodec_buf_to_bufref(efbuf, i, &avframe->buf[i], 
@@ -305,6 +308,7 @@ int ff_topscodec_efbuf_to_avframe(const EFBuffer *efbuf, AVFrame *avframe)
             avframe->linesize[i] = efbuf->ef_frame.plane[i].stride;
             avframe->data[i]     = avframe->buf[i]->data;
         }
+        avframe->hw_frames_ctx = av_buffer_ref(log_ctx->hw_frames_ctx);
     }
 
     /* 2. get avframe information */
@@ -334,8 +338,6 @@ int ff_topscodec_efbuf_to_avframe(const EFBuffer *efbuf, AVFrame *avframe)
     //     av_log(log_ctx, AV_LOG_ERROR, "driver decode error\n");
     //     avframe->decode_error_flags |= FF_DECODE_ERROR_INVALID_BITSTREAM;
     // }
-
-    avframe->hw_frames_ctx = av_buffer_ref(log_ctx->hw_frames_ctx);
 
     return 0;
 }

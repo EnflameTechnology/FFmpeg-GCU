@@ -300,6 +300,24 @@ static av_cold int topscodec_decode_init(AVCodecContext *avctx)
         ret = AVERROR(EINVAL);
         goto error;
     }
+
+    ret = ctx->topsruntime_lib_ctx->lib_topsInit(0);
+    if (ret != 0){
+        av_log(ctx, AV_LOG_ERROR,
+                "Error, topscodec_init failed, ret(%d)\n", ret);
+        ret = AVERROR(EINVAL);
+        goto error;
+    }
+
+    ret = ctx->topsruntime_lib_ctx->lib_topsSetDevice(ctx->card_id);
+    if (ret != 0){
+        av_log(ctx, AV_LOG_ERROR,
+                "Error, topscodec_set_device[%d] failed, ret(%d)\n", 
+                ctx->card_id, ret);
+        ret = AVERROR(EINVAL);
+        goto error;
+    }
+
     topscodec_get_version(avctx);
     memset(&ctx->caps, 0, sizeof(ctx->caps));
     /*get device caps*/
@@ -700,28 +718,44 @@ static av_cold int topscodec_decode_close(AVCodecContext *avctx)
         /*destory codec dec*/
         ctx->topscodec_lib_ctx->lib_topscodecDecDestroy(ctx->handle);
         ctx->handle = 0;
+        av_log(avctx, AV_LOG_DEBUG, "topscodecDecDestroy success\n");
     }
 
     if (ctx->stream_addr){
         ctx->topsruntime_lib_ctx->lib_topsFree((void *)ctx->stream_addr);
         ctx->stream_addr = 0;
+        av_log(avctx, AV_LOG_DEBUG, "topsFree stream_addr success\n");
     }
     
-    if(ctx->ef_buf_pkt)
+    if(ctx->ef_buf_pkt) {
         av_free(ctx->ef_buf_pkt);
-    if(ctx->ef_buf_frame)
+        av_log(avctx, AV_LOG_DEBUG, "ef_buf_pkt free\n");
+    }
+        
+    if(ctx->ef_buf_frame) {
         av_free(ctx->ef_buf_frame);
-
+        av_log(avctx, AV_LOG_DEBUG, "ef_buf_frame free\n");
+    }
+        
     if(ctx->topscodec_lib_ctx){
         topscodec_free_functions(&ctx->topscodec_lib_ctx);
+        av_log(avctx, AV_LOG_DEBUG, "topscodec_lib_ctx free\n");
     }
-    if(ctx->topscodec_lib_ctx){
+    if(ctx->topsruntime_lib_ctx){
         topsruntimes_free_functions(&ctx->topsruntime_lib_ctx);
+        av_log(avctx, AV_LOG_DEBUG, "topsruntime_lib_ctx free\n");
     }
 
-    if (ctx->hwframe)  av_buffer_unref(&ctx->hwframe);
-    if (ctx->hwdevice) av_buffer_unref(&ctx->hwdevice);
-
+    if (ctx->hwdevice) {
+        av_buffer_unref(&ctx->hwdevice);
+        av_log(avctx, AV_LOG_DEBUG, "hwdevice unref\n");
+    }
+        
+    if (ctx->hwframe) {
+        av_buffer_unref(&ctx->hwframe);
+        av_log(avctx, AV_LOG_DEBUG, "hwframe unref\n");
+    }
+        
     for(int i = 0; i < MAX_FRAME_NUM; i++) {
         if (ctx->last_received_frame[i]) {
             av_frame_free(&ctx->last_received_frame[i]);
@@ -738,7 +772,7 @@ static int topscodec_recived_helper(AVCodecContext *avctx, AVFrame *avframe)
     int ret = 0;
     
     EFCodecDecContext_t *ctx = (EFCodecDecContext_t*)avctx->priv_data;
-    av_frame_unref(avframe);
+    av_frame_unref(avframe);//fix me
 
     if (ctx->idx_put != ctx->idx_get) {
         av_frame_ref(avframe, ctx->last_received_frame[ctx->idx_get]);
@@ -848,7 +882,7 @@ static int topscodec_receive_frame(AVCodecContext *avctx, AVFrame *frame)
     /*when avpkt.size==0, means eof*/
     av_log(avctx, AV_LOG_DEBUG,
             "topscodecDecodeStream,pkt_size=%d\n", ctx->av_pkt.size);
-    if (ctx->first_packet){
+    if (ctx->first_packet) {
         if (avctx->extradata_size) {
             AVPacket p;
             p.data = avctx->extradata;

@@ -86,8 +86,8 @@ static void topscodec_buffer_free(void *opaque, uint8_t *data)
     AVHWFramesContext        *ctx = (AVHWFramesContext *)opaque;
     AVHWDeviceContext *device_ctx = ctx->device_ctx;
     AVTOPSCodecDeviceContext *tops_ctx = device_ctx->hwctx;
-
     tops_ctx->topsruntime_lib_ctx->lib_topsFree((void*)data);
+    av_log(ctx, AV_LOG_DEBUG, "pool buffer topsFree.\n");
 }
 
 static AVBufferRef *topscodec_pool_alloc(void *opaque, int size)
@@ -106,6 +106,7 @@ static AVBufferRef *topscodec_pool_alloc(void *opaque, int size)
                 "topscodec_malloc failed: dev addr %p, size %d \n", data, size);
         return NULL;
     }
+    av_log(ctx, AV_LOG_DEBUG, "pool topsMalloc size:%d, addr:%p\n", size, data);
     ref = av_buffer_create((uint8_t*)data, size, topscodec_buffer_free, ctx, 0);
     if (!ref) {
         tops_ctx->topsruntime_lib_ctx->lib_topsFree(data);
@@ -211,7 +212,7 @@ static int topscodec_transfer_data(AVHWFramesContext *ctx, AVFrame *dst,
     if ((src->hw_frames_ctx &&
         ((AVHWFramesContext*)src->hw_frames_ctx->data)->format != AV_PIX_FMT_EFCCODEC) ||
         (dst->hw_frames_ctx &&
-        ((AVHWFramesContext*)dst->hw_frames_ctx->data)->format != AV_PIX_FMT_EFCCODEC)){
+        ((AVHWFramesContext*)dst->hw_frames_ctx->data)->format != AV_PIX_FMT_EFCCODEC)) {
         av_log(ctx, AV_LOG_ERROR,
                 "topscodec_transfer_data_from failed,src/dst format err[%s].\n", 
         av_get_pix_fmt_name(((AVHWFramesContext*)src->hw_frames_ctx->data)->format));
@@ -295,27 +296,18 @@ static int topscodec_device_init(AVHWDeviceContext *device_ctx)
 {
     int ret;
     AVTOPSCodecDeviceContext *ctx = device_ctx->hwctx;
-    if(ctx->topscodec_lib_ctx){
-        ret = ctx->topsruntime_lib_ctx->lib_topsInit(0);
-        if (ret != 0){
-            av_log(ctx, AV_LOG_ERROR,
-                    "Error, topscodec_init failed, ret(%d)\n", ret);
-            ret = AVERROR(EINVAL);
-            return ret;
-        }
-    }
+    (void)ctx;
+    (void)ret;
+    //do something
     return 0;
 }
 
 static void topscodec_device_uninit(AVHWDeviceContext *device_ctx) 
 {
     AVTOPSCodecDeviceContext *ctx = device_ctx->hwctx;
-    if(ctx->topscodec_lib_ctx){
-        topscodec_free_functions(&ctx->topscodec_lib_ctx);
-    }
-
     if(ctx->topsruntime_lib_ctx){
         topsruntimes_free_functions(&ctx->topsruntime_lib_ctx);
+        av_log(ctx, AV_LOG_DEBUG, "topscodec_device_uninit\n");
     }
 }
 
@@ -328,13 +320,6 @@ static int topscodec_device_create(AVHWDeviceContext *device_ctx,
     int device_idx = 0;
     int ret        = 0;
 
-    ret = topscodec_load_functions(&ctx->topscodec_lib_ctx);
-    if (ret != 0) {
-        av_log(ctx, AV_LOG_ERROR,
-                "Error, topscodec_lib_load failed, ret(%d)\n", ret);
-        ret = AVERROR(EINVAL);
-        return ret;
-    }
     ret = topsruntimes_load_functions(&ctx->topsruntime_lib_ctx);
     if (ret != 0) {
         av_log(ctx, AV_LOG_ERROR,
@@ -345,15 +330,8 @@ static int topscodec_device_create(AVHWDeviceContext *device_ctx,
 
     if (device) 
         device_idx = strtol(device, NULL, 0);
-    /*Do not be confused by the name of device_idx, in fact it's card idx*/
-    ret = ctx->topsruntime_lib_ctx->lib_topsSetDevice(device_idx);
-    if (ret != 0){
-        av_log(ctx, AV_LOG_ERROR,
-                "Error, topscodec_set_device[%d] failed, ret(%d)\n", 
-                device_idx, ret);
-        ret = AVERROR(EINVAL);
-        return ret;
-    }
+        
+    (void)device_idx;
     return 0;
 }
 

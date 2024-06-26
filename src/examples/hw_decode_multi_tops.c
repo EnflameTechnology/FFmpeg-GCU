@@ -174,16 +174,16 @@ static AVCodec *create_decoder(enum AVCodecID codec_id) {
 }
 
 static int hw_decoder_init(
-    AVBufferRef *hw_device_ctx, AVCodecContext *ctx, 
+    AVBufferRef **hw_device_ctx, AVCodecContext *ctx, 
     const enum AVHWDeviceType type, const char *dev_id) {
     int ret = 0;
 
-    if ((ret = av_hwdevice_ctx_create(&hw_device_ctx, type,
+    if ((ret = av_hwdevice_ctx_create(hw_device_ctx, type,
                                       dev_id, NULL, 0)) < 0) {
         av_log(ctx, AV_LOG_ERROR, "Failed to create specified HW device.\n");
         return ret;
     }
-    ctx->hw_device_ctx = av_buffer_ref(hw_device_ctx);
+    ctx->hw_device_ctx = av_buffer_ref(*hw_device_ctx);
     return ret;
 }
 
@@ -282,10 +282,14 @@ static int decode_write(job_args_t *job, FILE *outfile, AVCodecContext *avctx,
 
         ret = avcodec_receive_frame(avctx, frame);
         if (ret == AVERROR_EOF) {
+            av_buffer_unref(&frame->hw_frames_ctx);
             av_frame_free(&frame);
             av_frame_free(&sw_frame);
             return 0;
         } else if (ret == AVERROR(EAGAIN)) {
+            av_buffer_unref(&frame->hw_frames_ctx);
+            av_frame_free(&frame);
+            av_frame_free(&sw_frame);
             if (send_eos) {
                 av_usleep(1);
                 av_log(avctx, AV_LOG_DEBUG, "EOS EAGAIN\n");
@@ -388,6 +392,7 @@ static int decode_write(job_args_t *job, FILE *outfile, AVCodecContext *avctx,
         }
 
 fail:
+        av_buffer_unref(&frame->hw_frames_ctx);
         av_frame_free(&frame);
         av_frame_free(&sw_frame);
         av_freep(&buffer);
@@ -497,7 +502,7 @@ static void *job_thread(void *arg) {
 
     memset(tmp, 0, sizeof(tmp));
     snprintf(tmp, sizeof(tmp), "%d", job->card_id);
-    if (hw_decoder_init(hw_device_ctx, avctx, type, tmp) < 0)
+    if (hw_decoder_init(&hw_device_ctx, avctx, type, tmp) < 0)
         return NULL;
 
     memset(tmp, 0, sizeof(tmp));
@@ -608,9 +613,10 @@ static void *job_thread(void *arg) {
     if (g_sync)
         synchoronize(SYNC_END);
     av_log(avctx, AV_LOG_INFO, "decode finish, frames:%ld\n", job->frames);
+    
+    av_buffer_unref(&hw_device_ctx);
     avcodec_free_context(&avctx);
     avformat_close_input(&input_ctx);
-    av_buffer_unref(&hw_device_ctx);
 
     return NULL;
 }
