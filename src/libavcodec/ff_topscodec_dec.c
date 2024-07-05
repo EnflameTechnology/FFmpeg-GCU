@@ -767,14 +767,15 @@ static av_cold int topscodec_decode_close(AVCodecContext *avctx)
     return 0;
 }
 
-static int topscodec_recived_helper(AVCodecContext *avctx, AVFrame *avframe)
+static int topscodec_recived_helper(AVCodecContext *avctx, AVFrame *avframe, 
+                                    int is_internel)
 {
     int ret = 0;
     
     EFCodecDecContext_t *ctx = (EFCodecDecContext_t*)avctx->priv_data;
     av_frame_unref(avframe);//fix me
 
-    if (ctx->idx_put != ctx->idx_get) {
+    if (is_internel != 1 && ctx->idx_put != ctx->idx_get) {
         av_frame_ref(avframe, ctx->last_received_frame[ctx->idx_get]);
         av_frame_unref(ctx->last_received_frame[ctx->idx_get]);
         ctx->idx_get = (ctx->idx_get + 1) % MAX_FRAME_NUM;
@@ -863,7 +864,7 @@ static int topscodec_receive_frame(AVCodecContext *avctx, AVFrame *frame)
         ret = ff_decode_get_packet(avctx, &ctx->av_pkt);
         if (ret < 0) {
             if (ret == AVERROR(EAGAIN)) { 
-                return topscodec_recived_helper(avctx, frame);
+                return topscodec_recived_helper(avctx, frame, 0);
             }
             else if (ret != AVERROR_EOF) {
                 return ret;
@@ -922,7 +923,7 @@ static int topscodec_receive_frame(AVCodecContext *avctx, AVFrame *frame)
                 AVFrame *tmp = ctx->last_received_frame[ctx->idx_put];
                 if (ctx->idx_get - ctx->idx_put != 1 &&
                     ctx->idx_get - ctx->idx_put != -(MAX_FRAME_NUM - 2)){
-                    ret2 = topscodec_recived_helper(avctx, tmp);
+                    ret2 = topscodec_recived_helper(avctx, tmp, 1);
                     if (0 == ret2) {
                         ctx->idx_put = (ctx->idx_put + 1) % MAX_FRAME_NUM;
                         av_log(avctx, AV_LOG_DEBUG,
@@ -959,7 +960,7 @@ static int topscodec_receive_frame(AVCodecContext *avctx, AVFrame *frame)
     av_packet_unref(&ctx->av_pkt);
         
 dequeue:
-    return topscodec_recived_helper(avctx, frame);
+    return topscodec_recived_helper(avctx, frame, 0);
 
 fail:
     av_log(avctx, AV_LOG_DEBUG, "topscodec_receive_frame,fail.\n");

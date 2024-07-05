@@ -621,6 +621,38 @@ static void *job_thread(void *arg) {
     return NULL;
 }
 
+static enum AVCodecID find_codec_id(const char* file) {
+    enum AVCodecID ret         = AV_CODEC_ID_NONE;
+    AVFormatContext *input_ctx = NULL;
+    AVStream        *video     = NULL;
+
+    if (avformat_open_input(&input_ctx, file, NULL, NULL) != 0) {
+        fprintf(stderr, "Cannot open input file '%s'\n", file);
+        return ret;
+    }
+
+    if (avformat_find_stream_info(input_ctx, NULL) < 0) {
+        fprintf(stderr, "Cannot find input stream information.\n");
+        return ret;
+    }
+
+    for (size_t i = 0; i < input_ctx->nb_streams; i++) {
+        if (input_ctx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
+            video = input_ctx->streams[i];
+            break;
+        }
+    }
+
+    if (NULL == video) {
+        fprintf(stderr, "video stream is NULL\n");
+        return ret;
+    }
+
+    ret = video->codecpar->codec_id;
+    avformat_close_input(&input_ctx);
+    return ret;
+}
+
 
 static int parse_opt(int argc, char **argv) {
   int result;
@@ -724,6 +756,7 @@ static int parse_opt(int argc, char **argv) {
 int main(int argc, char *argv[])
 {
     int ret = 0;
+    enum AVCodecID   codec_id = AV_CODEC_ID_NONE;
     
     ffmpeg_log_callback fptrLog;
     char name[MAX_PATH_LEN] = {0};
@@ -802,8 +835,16 @@ int main(int argc, char *argv[])
         return -1;
     }
 
+    codec_id = find_codec_id(g_in_file);
+
+    if (codec_id == AV_CODEC_ID_NONE) {
+        fprintf(stderr, "unknow codec id !!!\n");
+        return -1;
+    }
+
     g_is_av1 = 0;
-    if (end_with(g_in_file, ".av1") || end_with(g_in_file, ".AV1")) {
+    //if (end_with(g_in_file, ".av1") || end_with(g_in_file, ".AV1")) {
+    if (codec_id == AV_CODEC_ID_AV1) {
         g_is_av1 = 1;
         printf("file[%s] end with AV1\n", g_in_file);
     }
