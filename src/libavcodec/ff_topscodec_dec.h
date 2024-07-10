@@ -93,7 +93,7 @@ typedef struct {
     int      idx_put; //for last_received_frame
     int      idx_get; //for last_received_frame
 
-    EFBuffer *ef_buf_frame;
+    EFBuffer *ef_buf_frame[MAX_FRAME_NUM];
     EFBuffer *ef_buf_pkt;
 
     int64_t last_send_pkt_time;

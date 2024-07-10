@@ -687,11 +687,12 @@ static av_cold int topscodec_decode_init(AVCodecContext *avctx)
     ctx->ef_buf_pkt->ef_context       = ctx;
     ctx->ef_buf_pkt->ef_pkt.mem_addr  = 0;
     ctx->ef_buf_pkt->ef_pkt.alloc_len = 0;
-
-    ctx->ef_buf_frame = av_malloc(sizeof(EFBuffer));
-    memset(ctx->ef_buf_frame, 0, sizeof(EFBuffer));
-    ctx->ef_buf_frame->avctx         = avctx;
-    ctx->ef_buf_frame->ef_context    = ctx;
+    for (int i = 0; i < MAX_FRAME_NUM; i++) {
+        ctx->ef_buf_frame[i] = av_malloc(sizeof(EFBuffer));
+        memset(ctx->ef_buf_frame[i], 0, sizeof(EFBuffer));
+        ctx->ef_buf_frame[i]->avctx         = avctx;
+        ctx->ef_buf_frame[i]->ef_context    = ctx;
+    }
 
     if (!avctx->pkt_timebase.num || !avctx->pkt_timebase.den)
         av_log(avctx, AV_LOG_WARNING,
@@ -731,11 +732,12 @@ static av_cold int topscodec_decode_close(AVCodecContext *avctx)
         av_free(ctx->ef_buf_pkt);
         av_log(avctx, AV_LOG_DEBUG, "ef_buf_pkt free\n");
     }
-        
-    if(ctx->ef_buf_frame) {
-        av_free(ctx->ef_buf_frame);
-        av_log(avctx, AV_LOG_DEBUG, "ef_buf_frame free\n");
-    }
+    for (int i = 0; i < MAX_FRAME_NUM; i++) {
+        if (ctx->ef_buf_frame[i]) {
+            av_free(ctx->ef_buf_frame[i]);
+            av_log(avctx, AV_LOG_DEBUG, "ef_buf_frame[%d] free\n", i);
+        }
+    }   
         
     if(ctx->topscodec_lib_ctx){
         topscodec_free_functions(&ctx->topscodec_lib_ctx);
@@ -771,6 +773,7 @@ static int topscodec_recived_helper(AVCodecContext *avctx, AVFrame *avframe,
                                     int is_internel)
 {
     int ret = 0;
+    int idx = 0;
     
     EFCodecDecContext_t *ctx = (EFCodecDecContext_t*)avctx->priv_data;
     av_frame_unref(avframe);//fix me
@@ -783,14 +786,14 @@ static int topscodec_recived_helper(AVCodecContext *avctx, AVFrame *avframe,
                 ctx->idx_get, ctx->idx_put);
         return 0;
     }
-    
+    idx = ctx->idx_put;
     ret = ctx->topscodec_lib_ctx->lib_topscodecDecFrameMap(ctx->handle,
-                                                &ctx->ef_buf_frame->ef_frame);
+                                &ctx->ef_buf_frame[idx]->ef_frame);
     /*End of file*/
     if (TOPSCODEC_SUCCESS == ret){
-        if (ctx->draining                           &&
-            (0 == ctx->ef_buf_frame->ef_frame.width ||
-             0 == ctx->ef_buf_frame->ef_frame.height)) {
+        if (ctx->draining                                &&
+            (0 == ctx->ef_buf_frame[idx]->ef_frame.width ||
+             0 == ctx->ef_buf_frame[idx]->ef_frame.height)) {
             av_log(avctx, AV_LOG_DEBUG,"----EOS -----\n");
             ctx->recv_outport_eos = 1;
             return AVERROR_EOF;
@@ -814,19 +817,19 @@ static int topscodec_recived_helper(AVCodecContext *avctx, AVFrame *avframe,
     }
 
     if (avctx->pix_fmt == AV_PIX_FMT_EFCCODEC) {
-        ctx->ef_buf_frame->avctx = avctx;
-        ctx->ef_buf_frame->ef_context = ctx;
-        ret = ff_topscodec_efbuf_to_avframe(ctx->ef_buf_frame, avframe);
+        ctx->ef_buf_frame[idx]->avctx = avctx;
+        ctx->ef_buf_frame[idx]->ef_context = ctx;
+        ret = ff_topscodec_efbuf_to_avframe(ctx->ef_buf_frame[idx], avframe);
         if (ret < 0)
             return AVERROR_BUG;
     } else {
-        ctx->ef_buf_frame->avctx = avctx;
-        ctx->ef_buf_frame->ef_context = ctx;
-        ret = ff_topscodec_efbuf_to_avframe(ctx->ef_buf_frame, &ctx->mid_frame);
+        ctx->ef_buf_frame[idx]->avctx = avctx;
+        ctx->ef_buf_frame[idx]->ef_context = ctx;
+        ret = ff_topscodec_efbuf_to_avframe(ctx->ef_buf_frame[idx], &ctx->mid_frame);
         if (ret < 0)
             return AVERROR_BUG;
         avframe->format =
-                topspixfmt_2_avpixfmt(ctx->ef_buf_frame->ef_frame.pixel_format);
+            topspixfmt_2_avpixfmt(ctx->ef_buf_frame[idx]->ef_frame.pixel_format);
         ret = av_hwframe_transfer_data(avframe, &ctx->mid_frame, 0);
         if (ret) {
             av_log(avctx, AV_LOG_ERROR, "av_hwframe_transfer_data failed\n");
