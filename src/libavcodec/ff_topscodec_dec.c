@@ -982,7 +982,8 @@ static const AVOption options[] = {
         AV_OPT_TYPE_INT,
         { .i64 = 0 },
         0,
-        MAX_DEVICE_ID, VD 
+        MAX_DEVICE_ID,
+        VD 
     },
     { "device_id",
         "use to choose the accelerator device",
@@ -1043,7 +1044,8 @@ static const AVOption options[] = {
         OFFSET(str_output_pixfmt),
         AV_OPT_TYPE_STRING,
         {.str = "yuv420p"},
-        0,INT_MAX,
+        0,
+        INT_MAX,
         VD
     },
     { "output_colorspace",
