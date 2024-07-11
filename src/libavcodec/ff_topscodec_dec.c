@@ -200,6 +200,7 @@ static av_cold int topscodec_decode_init(AVCodecContext *avctx)
     int switch_frames_mode = 0;
     int switch_frames_num  = 0;
     int rotation_tmp       = 0;
+    int debug_level        = 1;
 
     enum AVPixelFormat pix_fmts[3];
 
@@ -216,6 +217,24 @@ static av_cold int topscodec_decode_init(AVCodecContext *avctx)
         av_log(avctx, AV_LOG_ERROR, "Error, cndecode double init. \n");
         return AVERROR_BUG;
     }
+
+    /*
+    DYN_DEBUG_LEVEL_DISABLE = 0
+    DYN_DEBUG_LEVEL_ERR     = 1
+    DYN_DEBUG_LEVEL_INFO    = 2
+    DYN_DEBUG_LEVEL_DEBUG   = 3
+    */
+    const char* debug_level_str = getenv("DYNLINK_DEBUG_LEVEL");
+    if (debug_level_str != NULL) {
+        debug_level = atoi(debug_level_str);
+        av_log(avctx, AV_LOG_DEBUG, " DYNLINK_DEBUG_LEVEL level: %d\n", 
+                                                                debug_level);
+    } else {
+        av_log(avctx, AV_LOG_DEBUG, "DYNLINK_DEBUG_LEVEL environment variable"
+                                " is not set, default DYN_DEBUG_LEVEL_ERR\n");
+    }
+
+    dynlink_set_debug_level(debug_level);
 
     
  switch (avctx->codec->id) {
@@ -354,6 +373,16 @@ static av_cold int topscodec_decode_init(AVCodecContext *avctx)
         ctx->out_width  = probed_width;
         ctx->out_height = probed_height;
     }
+    // if the user set the input width and height, use it
+    if (ctx->in_width <= 0 || ctx->in_height <= 0) {
+        ctx->in_width  = probed_width;
+        ctx->in_height = probed_height;
+    } else {
+        probed_height = ctx->in_height;
+        probed_width  = ctx->in_width;
+    }
+    av_log(avctx, AV_LOG_DEBUG, "Input dim:(%dx%d)\n",
+            ctx->in_width, ctx->in_height);
 
     avctx->coded_width  = probed_width;
     avctx->coded_height = probed_height;
@@ -366,9 +395,6 @@ static av_cold int topscodec_decode_init(AVCodecContext *avctx)
                 avctx->coded_width, avctx->coded_height, max_width, max_height);
         return AVERROR(EINVAL);
     }
-
-    ctx->in_width  = probed_width;
-    ctx->in_height = probed_height;
 
     if (ctx->enable_crop){
         av_log(avctx, AV_LOG_DEBUG, "Open crop options.\n");
@@ -536,7 +562,7 @@ static av_cold int topscodec_decode_init(AVCodecContext *avctx)
     ctx->stream_buf_size = FFALIGN(bitstream_size, 4096);
 
     memset(&codec_info, 0, sizeof(topscodecDecCreateInfo_t));
-    printf("zero copy %d\n",ctx->zero_copy);
+    av_log(avctx, AV_LOG_DEBUG, "zero copy %d\n",ctx->zero_copy);
     codec_info.device_id       = ctx->card_id;
     codec_info.session_id      = ctx->device_id;
     codec_info.hw_ctx_id       = ctx->hw_id;
@@ -1002,6 +1028,24 @@ static const AVOption options[] = {
         0,
         100,
         VD 
+    },
+    { "w",
+        "video width",
+        OFFSET(in_width),
+        AV_OPT_TYPE_INT,
+        { .i64 = 0 },
+        0,
+        INT_MAX,
+        VD
+    },
+    { "h",
+        "video height",
+        OFFSET(in_height),
+        AV_OPT_TYPE_INT,
+        { .i64 = 0 },
+        0,
+        INT_MAX,
+        VD
     },
     { "sf",
         "use to choose the switch ratio",

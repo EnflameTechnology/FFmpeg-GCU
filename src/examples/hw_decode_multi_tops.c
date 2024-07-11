@@ -82,6 +82,8 @@ typedef struct job_args {
     const char *in_file;
 } job_args_t;
 
+static int g_input_w    = 0;
+static int g_input_h    = 0;
 static int g_card_start = 0;
 static int g_card_end   = 1;
 static int g_dev_start  = 0;
@@ -102,6 +104,8 @@ static const char *g_in_file  = NULL;
 static const char *g_out_file = NULL;
 
 static void print_globle_var(void) {
+    printf("g_input_w:%d\n", g_input_w);
+    printf("g_input_h:%d\n", g_input_h);
     printf("g_card_start:%d\n", g_card_start);
     printf("g_card_end:%d\n", g_card_end);
     printf("g_dev_start:%d\n", g_dev_start);
@@ -529,6 +533,19 @@ static void *job_thread(void *arg) {
     snprintf(tmp, sizeof(tmp), "%d", g_zero_copy);
     av_dict_set(&dec_opts, "zero_copy", tmp, 0);
 
+    //case some video format can't detect w/h by avformat_find_stream_info
+    //so we need to set the video w/h by user
+    //expecially for the avs2
+    if (g_input_h > 0 && g_input_w > 0) {
+        memset(tmp, 0, sizeof(tmp));
+        snprintf(tmp, sizeof(tmp), "%d", g_input_w);
+        av_dict_set(&dec_opts, "w", tmp, 0);
+
+        memset(tmp, 0, sizeof(tmp));
+        snprintf(tmp, sizeof(tmp), "%d", g_input_h);
+        av_dict_set(&dec_opts, "h", tmp, 0);
+    }
+
     if ((ret = avcodec_open2(avctx, decoder, &dec_opts)) < 0) {
         fprintf(stderr, "Failed to open codec for stream #%d\n", video_stream);
         return NULL;
@@ -658,7 +675,7 @@ static int parse_opt(int argc, char **argv) {
   int result;
 
   while ((result = 
-                getopt(argc, argv, "a:e:c:n:d:m:s:i:o:y:l:k:f:b:p:z:")) != -1) {
+                getopt(argc, argv, "a:e:c:n:d:m:s:i:o:y:l:k:f:b:p:z:w:h:")) != -1) {
     switch (result) {
         case 'a':
         printf("option=h, optopt=%c, optarg=%s\n", optopt, optarg);
@@ -739,6 +756,16 @@ static int parse_opt(int argc, char **argv) {
         printf("option=o, optopt=%c, optarg=%s\n", optopt, optarg);
         g_out_file = optarg;
         printf("g_out_file:%s\n", g_out_file);
+        break;
+        case 'w':
+        printf("option=h, optopt=%c, optarg=%s\n", optopt, optarg);
+        g_input_w = atoi(optarg);
+        printf("g_input_w:%d\n", g_card_start);
+        break;
+        case 'h':
+        printf("option=h, optopt=%c, optarg=%s\n", optopt, optarg);
+        g_input_h = atoi(optarg);
+        printf("g_input_h:%d\n", g_card_start);
         break;
       case '?':
         printf("result=?, optopt=%c, optarg=%s\n", optopt, optarg);
