@@ -18,6 +18,10 @@ if(CMAKE_CXX_COMPILER)
     list(APPEND configure_options -X ${CMAKE_CXX_COMPILER})
 endif()
 
+if(CMAKE_CXX_COMPILER_AR)
+    list(APPEND configure_options -A ${CMAKE_CXX_COMPILER_AR})
+endif()
+
 if(PARALLEL)
     list(APPEND configure_options -j ${PARALLEL})
 endif()

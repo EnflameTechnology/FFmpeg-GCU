@@ -10,13 +10,14 @@ no_cache=false
 sysroot=""
 c_compiler="gcc"
 cxx_compiler="g++"
+compiler_ar="ar"
 ffmpeg_dir=""
 build_only=false
 parallel="-j$(nproc)"
 _type="release"
 _pre_c_flags="-g0 -O3 -DNDEBUG"
-_c_flags=""
-_ldflags="-fuse-ld=gold -ldl -lpthread"
+_c_flags="-Wl,--build-id"
+_ldflags="-fuse-ld=gold -ldl -lpthread -Wl,--build-id"
 _arch=""
 # _ldflags="-fuse-ld=gold -m64 -ldl -lpthread"
 
@@ -29,6 +30,7 @@ Options:
     -c cache_tool       ccache or sccache
     -C c-compiler       c compiler
     -X cxx-compier      cxx compiler
+    -A compiler_ar      compiler ar tool
     -S sysroot          sysroot
     -s ffmpeg_dir       ffmpeg source code dir
     -j parallel         make -j parallel default is \$(nproc)
@@ -51,7 +53,7 @@ if [ $2 ]; then
     done
 fi
 
-while getopts ':hc:C:X:S:bs:j:H:L:T:f:l:T:a:' opt; do
+while getopts ':hc:C:X:S:bs:j:H:L:T:f:l:T:a:A:' opt; do
     case "$opt" in
     b)
         build_only=true
@@ -65,6 +67,9 @@ while getopts ':hc:C:X:S:bs:j:H:L:T:f:l:T:a:' opt; do
         ;;
     X)
         cxx_compiler="$OPTARG"
+        ;;
+    A)
+        compiler_ar="$OPTARG"
         ;;
     S)
         sysroot="--sysroot=$OPTARG"
@@ -171,6 +176,7 @@ echo "configure FFmpeg"
     --prefix=${build_path}/ffmpeg_gcu \
     --cc="${cache_tool}$c_compiler" \
     --cxx="${cache_tool}$cxx_compiler" \
+    --ar="$compiler_ar" \
     $sysroot \
     $_arch \
     --extra-cflags="$_whole_c_flags" \
