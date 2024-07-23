@@ -44,6 +44,7 @@
 #include <signal.h>
 #include <libgen.h>
 #include <string.h>
+#include <stdatomic.h>
 
 typedef void (*ffmpeg_log_callback)(void *ptr, int level, const char *fmt, 
                 va_list vl);
@@ -58,9 +59,9 @@ typedef void (*ffmpeg_log_callback)(void *ptr, int level, const char *fmt,
 static char            logBufPrefix[LOG_BUF_PREFIX_SIZE] = {0};
 static char            logBuffer[LOG_BUF_SIZE]           = {0};
 static pthread_mutex_t cb_av_log_lock;
-static uint8_t g_receive[MAX_CARD_ID][MAX_DEV_ID][MAX_SESSIONS] = {0};
-static uint8_t g_start[MAX_CARD_ID][MAX_DEV_ID][MAX_SESSIONS]   = {0};
-static uint8_t g_end[MAX_CARD_ID][MAX_DEV_ID][MAX_SESSIONS]     = {0};
+static _Atomic uint8_t g_receive[MAX_CARD_ID][MAX_DEV_ID][MAX_SESSIONS] = {0};
+static _Atomic uint8_t g_start[MAX_CARD_ID][MAX_DEV_ID][MAX_SESSIONS]   = {0};
+static _Atomic uint8_t g_end[MAX_CARD_ID][MAX_DEV_ID][MAX_SESSIONS]     = {0};
 
 typedef struct job_args {
     int card_id;
