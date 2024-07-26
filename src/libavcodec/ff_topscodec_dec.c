@@ -320,13 +320,13 @@ static av_cold int topscodec_decode_init(AVCodecContext *avctx)
         goto error;
     }
 
-    ret = ctx->topsruntime_lib_ctx->lib_topsInit(0);
-    if (ret != 0){
-        av_log(ctx, AV_LOG_ERROR,
-                "Error, topscodec_init failed, ret(%d)\n", ret);
-        ret = AVERROR(EINVAL);
-        goto error;
-    }
+    // ret = ctx->topsruntime_lib_ctx->lib_topsInit(0);
+    // if (ret != 0){
+    //     av_log(ctx, AV_LOG_ERROR,
+    //             "Error, topscodec_init failed, ret(%d)\n", ret);
+    //     ret = AVERROR(EINVAL);
+    //     goto error;
+    // }
 
     ret = ctx->topsruntime_lib_ctx->lib_topsSetDevice(ctx->card_id);
     if (ret != 0){
