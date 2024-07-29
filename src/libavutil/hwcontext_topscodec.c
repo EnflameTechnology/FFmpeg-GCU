@@ -294,10 +294,18 @@ static int topscodec_transfer_data(AVHWFramesContext *ctx, AVFrame *dst,
 
 static int topscodec_device_init(AVHWDeviceContext *device_ctx) 
 {
-    int ret;
+    int ret = 0;
     AVTOPSCodecDeviceContext *ctx = device_ctx->hwctx;
-    (void)ctx;
-    (void)ret;
+    ret = topsruntimes_load_functions(&ctx->topsruntime_lib_ctx);
+    if (ret != 0) {
+        av_log(ctx, AV_LOG_ERROR,
+                "Error, topsruntime_lib_ctx failed, ret(%d)\n", ret);
+        ret = AVERROR(EINVAL);
+        return ret;
+    }
+
+    // (void)ctx;
+    // (void)ret;
     //do something
     return 0;
 }
@@ -320,18 +328,20 @@ static int topscodec_device_create(AVHWDeviceContext *device_ctx,
     int device_idx = 0;
     int ret        = 0;
 
-    ret = topsruntimes_load_functions(&ctx->topsruntime_lib_ctx);
-    if (ret != 0) {
-        av_log(ctx, AV_LOG_ERROR,
-                "Error, topsruntime_lib_ctx failed, ret(%d)\n", ret);
-        ret = AVERROR(EINVAL);
-        return ret;
-    }
+    // ret = topsruntimes_load_functions(&ctx->topsruntime_lib_ctx);
+    // if (ret != 0) {
+    //     av_log(ctx, AV_LOG_ERROR,
+    //             "Error, topsruntime_lib_ctx failed, ret(%d)\n", ret);
+    //     ret = AVERROR(EINVAL);
+    //     return ret;
+    // }
 
     if (device) 
         device_idx = strtol(device, NULL, 0);
         
     (void)device_idx;
+    (void)ctx;
+    (void)ret;
     return 0;
 }
 
