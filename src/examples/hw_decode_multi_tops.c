@@ -180,11 +180,11 @@ static AVCodec *create_decoder(enum AVCodecID codec_id) {
 
 static int hw_decoder_init(
     AVBufferRef **hw_device_ctx, AVCodecContext *ctx, 
-    const enum AVHWDeviceType type, const char *dev_id) {
+    const enum AVHWDeviceType type, const char *card_id) {
     int ret = 0;
 
     if ((ret = av_hwdevice_ctx_create(hw_device_ctx, type,
-                                      dev_id, NULL, 0)) < 0) {
+                                      card_id, NULL, 0)) < 0) {
         av_log(ctx, AV_LOG_ERROR, "Failed to create specified HW device.\n");
         return ret;
     }

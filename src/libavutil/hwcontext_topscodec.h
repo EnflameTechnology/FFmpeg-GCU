@@ -28,8 +28,6 @@
  */
 typedef struct AVTOPSCodecDeviceContext {
     TopsRuntimesFunctions *topsruntime_lib_ctx;
-    TopsCodecFunctions *topscodec_lib_ctx;
-    AVBufferRef *dynlink_ref;
     int reserved[4];
     void* reserved2[4];
 } AVTOPSCodecDeviceContext;

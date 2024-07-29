@@ -186,6 +186,8 @@ static av_cold int topscodec_decode_init(AVCodecContext *avctx)
 {
     EFCodecDecContext_t *ctx            = NULL; 
     AVHWFramesContext *hwframe_ctx      = NULL;
+    AVHWDeviceContext *device_ctx       = NULL;
+    AVTOPSCodecDeviceContext *device_hwctx = NULL;
     topscodecDecCreateInfo_t codec_info = { 0 };
     topscodecDecParams_t params         = { 0 };
     char card_idx[sizeof(int)]          = { 0 };
@@ -312,30 +314,30 @@ static av_cold int topscodec_decode_init(AVCodecContext *avctx)
         goto error;
     }
 
-    ret = topsruntimes_load_functions(&ctx->topsruntime_lib_ctx);
-    if(ret != 0){
-        av_log(avctx, AV_LOG_ERROR,
-                "Error, topsruntime_lib_ctx failed, ret(%d)\n", ret);
-        ret = AVERROR(EINVAL);
-        goto error;
-    }
+    // ret = topsruntimes_load_functions(&ctx->topsruntime_lib_ctx);
+    // if(ret != 0){
+    //     av_log(avctx, AV_LOG_ERROR,
+    //             "Error, topsruntime_lib_ctx failed, ret(%d)\n", ret);
+    //     ret = AVERROR(EINVAL);
+    //     goto error;
+    // }
 
-    ret = ctx->topsruntime_lib_ctx->lib_topsInit(0);
-    if (ret != 0){
-        av_log(ctx, AV_LOG_ERROR,
-                "Error, topscodec_init failed, ret(%d)\n", ret);
-        ret = AVERROR(EINVAL);
-        goto error;
-    }
+    // ret = ctx->topsruntime_lib_ctx->lib_topsInit(0);
+    // if (ret != 0){
+    //     av_log(ctx, AV_LOG_ERROR,
+    //             "Error, topscodec_init failed, ret(%d)\n", ret);
+    //     ret = AVERROR(EINVAL);
+    //     goto error;
+    // }
 
-    ret = ctx->topsruntime_lib_ctx->lib_topsSetDevice(ctx->card_id);
-    if (ret != 0){
-        av_log(ctx, AV_LOG_ERROR,
-                "Error, topscodec_set_device[%d] failed, ret(%d)\n", 
-                ctx->card_id, ret);
-        ret = AVERROR(EINVAL);
-        goto error;
-    }
+    // ret = ctx->topsruntime_lib_ctx->lib_topsSetDevice(ctx->card_id);
+    // if (ret != 0){
+    //     av_log(ctx, AV_LOG_ERROR,
+    //             "Error, topscodec_set_device[%d] failed, ret(%d)\n", 
+    //             ctx->card_id, ret);
+    //     ret = AVERROR(EINVAL);
+    //     goto error;
+    // }
 
     topscodec_get_version(avctx);
     memset(&ctx->caps, 0, sizeof(ctx->caps));
@@ -475,6 +477,7 @@ static av_cold int topscodec_decode_init(AVCodecContext *avctx)
         }
 
         hwframe_ctx = (AVHWFramesContext*)ctx->hwframe->data;
+        hwframe_ctx->device_ctx = (AVHWDeviceContext*)hwframe_ctx->device_ref->data;
         ctx->hwdevice = av_buffer_ref(hwframe_ctx->device_ref);
         if (!ctx->hwdevice) {
             av_log(avctx, AV_LOG_ERROR, "A hardware frames or device context is"
@@ -528,6 +531,9 @@ static av_cold int topscodec_decode_init(AVCodecContext *avctx)
     }
 
     ctx->hwframes_ctx = hwframe_ctx;
+    device_ctx = hwframe_ctx->device_ctx;
+    device_hwctx = device_ctx->hwctx; 
+    ctx->topsruntime_lib_ctx = device_hwctx->topsruntime_lib_ctx;
 
     ctx->total_frame_count  = 0;
     ctx->total_packet_count = 0;
@@ -768,10 +774,6 @@ static av_cold int topscodec_decode_close(AVCodecContext *avctx)
     if(ctx->topscodec_lib_ctx){
         topscodec_free_functions(&ctx->topscodec_lib_ctx);
         av_log(avctx, AV_LOG_DEBUG, "topscodec_lib_ctx free\n");
-    }
-    if(ctx->topsruntime_lib_ctx){
-        topsruntimes_free_functions(&ctx->topsruntime_lib_ctx);
-        av_log(avctx, AV_LOG_DEBUG, "topsruntime_lib_ctx free\n");
     }
 
     if (ctx->hwdevice) {
