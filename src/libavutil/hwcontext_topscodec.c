@@ -342,6 +342,11 @@ static void topscodec_device_uninit(AVHWDeviceContext *device_ctx)
 {
     AVTOPSCodecDeviceContext *ctx = device_ctx->hwctx;
     av_buffer_unref(&ctx->dynlink_ref);
+    pthread_mutex_lock(&g_mutex);
+    if (g_tops_lib_ref) {
+        av_buffer_unref(&g_tops_lib_ref);
+    }
+    pthread_mutex_unlock(&g_mutex);
 }
 
 /*TODO*/
