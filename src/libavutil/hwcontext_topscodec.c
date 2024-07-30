@@ -329,14 +329,15 @@ static int topscodec_device_create(AVHWDeviceContext *device_ctx,
     if (device) 
         device_idx = strtol(device, NULL, 0);
     
-    ret = ctx->topsruntime_lib_ctx->lib_topsSetDevice(device_idx);
-    if (ret != 0){
-        av_log(ctx, AV_LOG_ERROR,
-                "Error, topscodec_set_device[%d] failed, ret(%d)\n", 
-                device_idx, ret);
-        ret = AVERROR(EINVAL);
-        return ret;
-    }
+    // ret = ctx->topsruntime_lib_ctx->lib_topsSetDevice(device_idx);
+    // if (ret != 0){
+    //     av_log(ctx, AV_LOG_ERROR,
+    //             "Error, topscodec_set_device[%d] failed, ret(%d)\n", 
+    //             device_idx, ret);
+    //     ret = AVERROR(EINVAL);
+    //     return ret;
+    // }
+    (void)device_idx;
         
     return 0;
 }
