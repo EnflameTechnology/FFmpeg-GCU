@@ -37,6 +37,44 @@
 
 #define TOPSCODEC_FRAME_ALIGNMENT 1 // tops align
 
+struct tops_lib {
+    void *reserve;
+    TopsRuntimesFunctions *lib_topsruntime;
+};
+static struct tops_lib g_tops_lib;
+static AVBufferRef *g_tops_lib_ref = NULL;
+static pthread_mutex_t g_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+static void free_ref(void *opaque, uint8_t *unused){
+    (void)opaque;
+    (void)unused;
+    if(g_tops_lib.lib_topsruntime){
+        topsruntimes_free_functions(&g_tops_lib.lib_topsruntime);
+        av_log(NULL, AV_LOG_DEBUG, "topsruntimes_free_functions success\n");
+    }
+}
+
+static void load_functions(void) {
+    int ret = 0;
+    TopsRuntimesFunctions *lib_topsruntime;
+
+    ret = topsruntimes_load_functions(&lib_topsruntime);
+    if(ret != 0){
+        av_log(NULL, AV_LOG_ERROR,
+                "Error, topsruntime_lib_ctx failed, ret(%d)\n", ret);
+        exit(1);
+    }
+    av_log(NULL, AV_LOG_DEBUG, "topsruntimes_load_functions success\n");
+
+    g_tops_lib.lib_topsruntime = lib_topsruntime;
+    g_tops_lib_ref = av_buffer_create((uint8_t*)&g_tops_lib, sizeof(g_tops_lib), free_ref, NULL, 0);
+}
+
+static TopsRuntimesFunctions *get_topsruntime_handle(void) {
+    return g_tops_lib.lib_topsruntime;
+}
+
+
 static const enum AVPixelFormat supported_formats[] = {
     AV_PIX_FMT_YUV420P,    
     AV_PIX_FMT_NV12,      
@@ -303,10 +341,7 @@ static int topscodec_device_init(AVHWDeviceContext *device_ctx)
 static void topscodec_device_uninit(AVHWDeviceContext *device_ctx) 
 {
     AVTOPSCodecDeviceContext *ctx = device_ctx->hwctx;
-    if(ctx->topsruntime_lib_ctx){
-        topsruntimes_free_functions(&ctx->topsruntime_lib_ctx);
-        av_log(ctx, AV_LOG_DEBUG, "topscodec_device_uninit\n");
-    }
+    av_buffer_unref(&ctx->dynlink_ref);
 }
 
 /*TODO*/
@@ -318,25 +353,25 @@ static int topscodec_device_create(AVHWDeviceContext *device_ctx,
     int device_idx = 0;
     int ret        = 0;
 
-    ret = topsruntimes_load_functions(&ctx->topsruntime_lib_ctx);
-    if (ret != 0) {
-        av_log(ctx, AV_LOG_ERROR,
-                "Error, topsruntime_lib_ctx failed, ret(%d)\n", ret);
-        ret = AVERROR(EINVAL);
-        return ret;
+    pthread_mutex_lock(&g_mutex);
+    if(!g_tops_lib_ref){
+        load_functions();
     }
+    pthread_mutex_unlock(&g_mutex);
+    ctx->topsruntime_lib_ctx = get_topsruntime_handle();
+    ctx->dynlink_ref = av_buffer_ref(g_tops_lib_ref);
 
     if (device) 
         device_idx = strtol(device, NULL, 0);
     
-    // ret = ctx->topsruntime_lib_ctx->lib_topsSetDevice(device_idx);
-    // if (ret != 0){
-    //     av_log(ctx, AV_LOG_ERROR,
-    //             "Error, topscodec_set_device[%d] failed, ret(%d)\n", 
-    //             device_idx, ret);
-    //     ret = AVERROR(EINVAL);
-    //     return ret;
-    // }
+    ret = ctx->topsruntime_lib_ctx->lib_topsSetDevice(device_idx);
+    if (ret != 0){
+        av_log(ctx, AV_LOG_ERROR,
+                "Error, topscodec_set_device[%d] failed, ret(%d)\n", 
+                device_idx, ret);
+        ret = AVERROR(EINVAL);
+        return ret;
+    }
     (void)device_idx;
         
     return 0;
