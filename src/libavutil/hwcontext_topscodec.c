@@ -54,7 +54,7 @@ static void free_ref(void *opaque, uint8_t *unused){
     }
 }
 
-static void load_functions(void) {
+static void load_functions() {
     int ret = 0;
     TopsRuntimesFunctions *lib_topsruntime;
 
@@ -70,7 +70,7 @@ static void load_functions(void) {
     g_tops_lib_ref = av_buffer_create((uint8_t*)&g_tops_lib, sizeof(g_tops_lib), free_ref, NULL, 0);
 }
 
-static TopsRuntimesFunctions *get_topsruntime_handle(void) {
+static TopsRuntimesFunctions *get_topsruntime_handle() {
     return g_tops_lib.lib_topsruntime;
 }
 
