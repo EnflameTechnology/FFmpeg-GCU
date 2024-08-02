@@ -165,11 +165,29 @@ fi
 
 echo "copy FFmpeg GCU Plugin files info FFmpeg source tree"
 cd $ffmpeg_dir
-cp ${src_path}/src/configure ${ffmpeg_dir}/
+cp ${src_path}/src/configure* ${ffmpeg_dir}/
+pushd
+
+echo "add hwaccel to configure"
+${ffmpeg_dir}/configure_insert.sh # add hwaccel to configure
+popd
 cp ${src_path}/src/libavformat/* ${ffmpeg_dir}/libavformat/
 cp ${src_path}/src/libavcodec/* ${ffmpeg_dir}/libavcodec/
+pushd ${ffmpeg_dir}/libavcodec
+echo "add codec to allcodecs.c"
+${ffmpeg_dir}/libavcodec/avcodec_insert.sh # add codec to allcodecs.c
+popd
 cp ${src_path}/src/libavutil/* ${ffmpeg_dir}/libavutil/
+pushd ${ffmpeg_dir}/libavutil
+echo "add pixfmt to pixdesc.c"
+${ffmpeg_dir}/libavutil/avutil_insert.sh # add pixfmt to pixdesc.c
+popd
+
 cp ${src_path}/src/examples/* ${ffmpeg_dir}/doc/examples/
+pushd ${ffmpeg_dir}/doc/examples/
+echo "add hw_decode_tops to examples"
+${ffmpeg_dir}/doc/examples/example_insert.sh # add hw_decode_tops to examples
+popd
 
 echo "configure FFmpeg"
 ./configure \

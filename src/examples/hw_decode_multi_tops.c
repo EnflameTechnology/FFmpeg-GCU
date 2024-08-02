@@ -1020,9 +1020,9 @@ int main(int argc, char *argv[])
                                           "dev:%2d, "
                                           "session:%2d, "
                                           "frames:%5d, "
-                                          "skip_frames:%5d, "
+                                          "skip_frames:%5lu, "
                                           "fps:%5.2f, "
-                                          "latency:%u\n", 
+                                          "latency:%lu\n", 
                                           i, 
                                           j, 
                                           k, 
@@ -1050,9 +1050,9 @@ int main(int argc, char *argv[])
                     "dev:%2d, "
                     "nsession:%2d, "
                     "sf:%2d,  "
-                    "skip_frames:%"PRIu64", "
+                    "skip_frames:%5lu, "
                     "standard deviation:%8.2f, "
-                    "mean_latency:%"PRIu64", "
+                    "mean_latency:%5lu, "
                     "max_fps:%8.2f, "
                     "min_fps:%8.2f, "
                     "mean_fps:%8.2f\n", 
