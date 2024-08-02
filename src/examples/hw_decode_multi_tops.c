@@ -31,6 +31,7 @@
  */
 
 #include <stdio.h>
+#include <inttypes.h>
 #include <unistd.h>
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
@@ -59,9 +60,73 @@ typedef void (*ffmpeg_log_callback)(void *ptr, int level, const char *fmt,
 static char            logBufPrefix[LOG_BUF_PREFIX_SIZE] = {0};
 static char            logBuffer[LOG_BUF_SIZE]           = {0};
 static pthread_mutex_t cb_av_log_lock;
-static _Atomic uint8_t g_receive[MAX_CARD_ID][MAX_DEV_ID][MAX_SESSIONS] = {0};
-static _Atomic uint8_t g_start[MAX_CARD_ID][MAX_DEV_ID][MAX_SESSIONS]   = {0};
-static _Atomic uint8_t g_end[MAX_CARD_ID][MAX_DEV_ID][MAX_SESSIONS]     = {0};
+
+typedef struct {
+    pthread_mutex_t mutex;
+    pthread_cond_t cond;
+    int count;
+    int released;
+} pseudo_barrier_t;
+
+static pseudo_barrier_t g_barrier_start;
+static pseudo_barrier_t g_barrier_frame;
+static pseudo_barrier_t g_barrier_end;
+
+static void pseudo_barrier_init(pseudo_barrier_t *b, int count) {
+    pthread_mutex_init(&b->mutex, NULL);
+    pthread_cond_init(&b->cond, NULL);
+    b->count = count;
+    b->released = 0;
+}
+
+static void pseudo_barrier_wait(pseudo_barrier_t *b) {
+    pthread_mutex_lock(&b->mutex);
+    if (--b->count == 0) {
+        b->released = 1;
+        pthread_cond_broadcast(&b->cond);
+    } else {
+        while (!b->released) {
+            pthread_cond_wait(&b->cond, &b->mutex);
+        }
+    }
+    pthread_mutex_unlock(&b->mutex);
+}
+
+static void pseudo_barrier_destroy(pseudo_barrier_t *b) {
+    pthread_mutex_destroy(&b->mutex);
+    pthread_cond_destroy(&b->cond);
+    b->count = 0;
+    b->released = 0;
+}
+
+typedef enum Sync_type {
+    SYNC_START,
+    SYNC_FRAME,
+    SYNC_END
+} Sync_type;
+
+static const char* Sync_type2str(Sync_type type) {
+    switch(type) {
+        case SYNC_START:
+            return "SYNC_START";
+        case SYNC_FRAME:
+            return "SYNC_FRAME";
+        case SYNC_END:
+            return "SYNC_END";
+        default:
+            return "UNKNOWN";
+    }
+}
+
+static void synchoronize(Sync_type type) {
+    av_log(NULL, AV_LOG_INFO, "synchoronize:%s\n", Sync_type2str(type));
+    if (type == SYNC_START)
+        pseudo_barrier_wait(&g_barrier_start);
+    else if (type == SYNC_FRAME)
+        pseudo_barrier_wait(&g_barrier_frame);
+    else if (type == SYNC_END)
+        pseudo_barrier_wait(&g_barrier_end);
+}
 
 typedef struct job_args {
     int card_id;
@@ -206,59 +271,6 @@ static enum AVPixelFormat get_hw_format(AVCodecContext *ctx,
     return AV_PIX_FMT_NONE;
 }
 
-typedef enum Sync_type {
-    SYNC_START,
-    SYNC_FRAME,
-    SYNC_END
-} Sync_type;
-
-static const char* Sync_type2str(Sync_type type) {
-    switch(type) {
-        case SYNC_START:
-            return "SYNC_START";
-        case SYNC_FRAME:
-            return "SYNC_FRAME";
-        case SYNC_END:
-            return "SYNC_END";
-        default:
-            return "UNKNOWN";
-    }
-}
-
-static void synchoronize(Sync_type type) {
-    int index = 0;
-    av_log(NULL, AV_LOG_INFO, "synchoronize:%s\n", Sync_type2str(type));
-    for(int card = g_card_start; card < g_card_end; card++) {
-        for(int dev = g_dev_start; dev < g_dev_end; dev++) {
-            if(g_is_av1 == 1 && dev % 2 == 0)
-                continue;
-            index = 0;
-            while (index < g_sessions) {
-                if (type == SYNC_START) {
-                    if (g_start[card][dev][index] != 1) {
-                        av_usleep(10);
-                        index = 0;
-                        continue;
-                    }
-                } else if (type == SYNC_FRAME) {
-                    if (g_receive[card][dev][index] != 1) {
-                        av_usleep(10);
-                        index = 0;
-                        continue;
-                    }
-                } else if (type == SYNC_END) {
-                    if (g_end[card][dev][index] != 1) {
-                        av_usleep(10);
-                        index = 0;
-                        continue;
-                    }
-                }
-                index++;
-            }
-        } //for dev
-    } //for card
-}
-
 static int decode_write(job_args_t *job, FILE *outfile, AVCodecContext *avctx, 
                         AVPacket *packet, int send_eos)
 {
@@ -311,11 +323,7 @@ static int decode_write(job_args_t *job, FILE *outfile, AVCodecContext *avctx,
         }
 
         job->frames++;
-        if (job->frames == g_skip_frames &&
-                g_receive[job->card_id][job->dev_id][job->session_id] == 0) {
-            g_receive[job->card_id][job->dev_id][job->session_id] = 1;
-            printf("card:%d, dev:%d, session:%d, first frame received:%d\n",
-                    job->card_id, job->dev_id, job->session_id, job->frames);
+        if (job->frames == g_skip_frames) {
             if (g_sync)
                 synchoronize(SYNC_FRAME);
             job->first_read_frames = job->frames;
@@ -402,11 +410,11 @@ fail:
         av_frame_free(&sw_frame);
         av_freep(&buffer);
         if (ret < 0) {
-            av_log(avctx, AV_LOG_ERROR, "thread:%d fail, ret=%d\n",
+            av_log(avctx, AV_LOG_ERROR, "thread:%s fail, ret=%d\n",
                                                     job->job_name, ret);
             return ret;
         } 
-        av_log(avctx, AV_LOG_DEBUG, "app capture frame:%ld\n", job->frames);
+        av_log(avctx, AV_LOG_DEBUG, "app capture frame:%d\n", job->frames);
     } //while
     return 0;
 }
@@ -570,7 +578,6 @@ static void *job_thread(void *arg) {
         av_log(avctx, AV_LOG_DEBUG, "open output file %s\n", job->out_file);
     }
     // sychoronize sessions
-    g_start[job->card_id][job->dev_id][job->session_id] = 1;
     if (g_sync)
         synchoronize(SYNC_START);
 
@@ -627,10 +634,9 @@ static void *job_thread(void *arg) {
     if (g_kill_flag) {
         SUICIDE()
     }
-    g_end[job->card_id][job->dev_id][job->session_id] = 1;
     if (g_sync)
         synchoronize(SYNC_END);
-    av_log(avctx, AV_LOG_INFO, "decode finish, frames:%ld\n", job->frames);
+    av_log(avctx, AV_LOG_INFO, "decode finish, frames:%d\n", job->frames);
     
     av_buffer_unref(&hw_device_ctx);
     avcodec_free_context(&avctx);
@@ -671,6 +677,23 @@ static enum AVCodecID find_codec_id(const char* file) {
     return ret;
 }
 
+static int cal_card_dev_session() {
+    int total = 0;
+    for (int i = g_card_start; i < g_card_end; i++) {
+        for (int j = g_dev_start; j < g_dev_end; j++) {
+            if (g_is_av1) {
+                if (j % 2 == 0) {
+                    av_log(NULL, AV_LOG_INFO, "skip dev_id:%d\n", j);
+                    continue;
+                }
+            }
+            for (int k = 0; k < g_sessions; k++) {
+                total++;
+            }
+        }
+    }
+    return total;
+}
 
 static int parse_opt(int argc, char **argv) {
   int result;
@@ -897,7 +920,10 @@ int main(int argc, char *argv[])
         return -1;
     }
     printf("TOPS_VISIBLE_DEVICE:%s\n", getenv("TOPS_VISIBLE_DEVICE"));
-
+    int all_session = cal_card_dev_session();
+    pseudo_barrier_init(&g_barrier_start, all_session);
+    pseudo_barrier_init(&g_barrier_end, all_session);
+    pseudo_barrier_init(&g_barrier_frame, all_session);
     for (int i = g_card_start; i < g_card_end; i++) {
         for (int j = g_dev_start; j < g_dev_end; j++) {
             if (g_is_av1) {
@@ -1009,6 +1035,7 @@ int main(int argc, char *argv[])
             mean_skip_frames = sum_skip_frames / g_sessions;
             /*cal standard_deviation*/
             variance = 0.0;
+
             standard_deviation = 0.0;
             diff = 0.0;
             for (int k = 0; k < g_sessions; k++) {
@@ -1023,9 +1050,9 @@ int main(int argc, char *argv[])
                     "dev:%2d, "
                     "nsession:%2d, "
                     "sf:%2d,  "
-                    "skip_frames:%5d, "
+                    "skip_frames:%"PRIu64", "
                     "standard deviation:%8.2f, "
-                    "mean_latency:%d, "
+                    "mean_latency:%"PRIu64", "
                     "max_fps:%8.2f, "
                     "min_fps:%8.2f, "
                     "mean_fps:%8.2f\n", 
@@ -1043,5 +1070,8 @@ int main(int argc, char *argv[])
     }
     av_log(NULL, AV_LOG_INFO, "main thread finish\n");
     pthread_mutex_destroy(&cb_av_log_lock);
+    pseudo_barrier_destroy(&g_barrier_start);
+    pseudo_barrier_destroy(&g_barrier_end);
+    pseudo_barrier_destroy(&g_barrier_frame);
     return 0;
 }
