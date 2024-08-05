@@ -167,7 +167,6 @@ echo "copy FFmpeg GCU Plugin files info FFmpeg source tree"
 cd $ffmpeg_dir
 cp ${src_path}/src/configure* ${ffmpeg_dir}/
 pushd
-
 echo "add hwaccel to configure"
 ${ffmpeg_dir}/configure_insert.sh # add hwaccel to configure
 popd

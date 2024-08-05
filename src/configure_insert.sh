@@ -45,3 +45,14 @@ ${MPEG4}\
 ${MPEG2}\
 ${MPEG1}\
 ${MJPEG}" ${C_FILE}
+
+#configure 3
+END3='vaapi_encode_example'
+HW_DECODE_TOPS_EXAMPLE='hw_decode_tops_example\n'
+DECODE_TOPS_EXAMPLE='decode_tops_example\n'
+HW_DECODE_MULTI_TOPS_EXAMPLE='hw_decode_multi_tops_example'
+
+sed -i "/${END3}/a \
+${HW_DECODE_TOPS_EXAMPLE}\
+${DECODE_TOPS_EXAMPLE}\
+${HW_DECODE_MULTI_TOPS_EXAMPLE}" ${C_FILE}
