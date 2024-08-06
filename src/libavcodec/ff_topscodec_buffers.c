@@ -322,8 +322,14 @@ int ff_topscodec_efbuf_to_avframe(const EFBuffer *efbuf, AVFrame *avframe)
     avframe->color_range     = topscodec_get_color_range(efbuf);
     avframe->color_trc       = topscodec_get_color_trc(efbuf);
 
-    avframe->pts             = efbuf->ef_frame.pts;
-    avframe->pkt_dts         = AV_NOPTS_VALUE;/*TODO*/
+    if (log_ctx->pkt_timebase.num && log_ctx->pkt_timebase.den)
+        avframe->pts = av_rescale_q(efbuf->ef_frame.pts, (AVRational){1, 10000000}, log_ctx->pkt_timebase);
+    else
+        avframe->pts = efbuf->ef_frame.pts;
+
+    avframe->pkt_pos = -1;
+    avframe->pkt_duration = 0;
+    avframe->pkt_size = -1;
 
     if (!ctx->enable_crop && !ctx->enable_resize){
         log_ctx->coded_height    = efbuf->ef_frame.height;
@@ -377,6 +383,7 @@ int ff_topscodec_avpkt_to_efbuf(const AVPacket *avpkt, EFBuffer *efbuf)
         
     topsError_t tops_ret;
     topsPointerAttribute_t att;
+    int reget_addr = 0;
 
     av_assert0(avpkt);
     av_assert0(efbuf);
@@ -405,6 +412,7 @@ int ff_topscodec_avpkt_to_efbuf(const AVPacket *avpkt, EFBuffer *efbuf)
             return AVERROR(EPERM);
         }
         ctx->stream_addr = (uint64_t)tmp;
+        reget_addr = 1;
         av_log(avctx, AV_LOG_DEBUG, "malloc stream_addr:0x%lx\n", 
                                                             ctx->stream_addr);
     }
@@ -425,13 +433,16 @@ int ff_topscodec_avpkt_to_efbuf(const AVPacket *avpkt, EFBuffer *efbuf)
     }
 
     /*get device addr*/
-    tops_ret = topsruntimes->lib_topsPointerGetAttributes(&att, 
+    if (reget_addr) {
+        tops_ret = topsruntimes->lib_topsPointerGetAttributes(&att, 
                                                     (void *)(ctx->stream_addr));
-    if (tops_ret != topsSuccess) {
-        av_log(avctx, AV_LOG_ERROR, "topsPointerGetAttributes failed!\n");
-        return AVERROR(EPERM);
+        if (tops_ret != topsSuccess) {
+            av_log(avctx, AV_LOG_ERROR, "topsPointerGetAttributes failed!\n");
+            return AVERROR(EPERM);
+        }
+        ctx->mem_addr  = (u64_t)att.device_pointer;
     }
-    efpkt->mem_addr  = (u64_t)att.device_pointer;
+    efpkt->mem_addr  = ctx->mem_addr;
     efpkt->alloc_len = ctx->stream_buf_size;
     av_log(avctx, AV_LOG_DEBUG, "Buf size:%d, addr:0x%lx \n",
             ctx->stream_buf_size, efpkt->mem_addr);

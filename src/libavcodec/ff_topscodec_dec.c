@@ -160,6 +160,8 @@ static void print_frame(AVCodecContext *avctx, topscodecFrame_t *frame) {
         frame->pic_type);
   av_log(avctx, AV_LOG_DEBUG, "\t pixel_fmt(%d)                \t\n",
         frame->pixel_format);
+  av_log(avctx, AV_LOG_DEBUG, "\t pts(%d)                      \t\n",
+        frame->pts);
   av_log(avctx, AV_LOG_DEBUG, "\t                             }\t\n");
 }
 
@@ -824,8 +826,10 @@ static int topscodec_recived_helper(AVCodecContext *avctx, AVFrame *avframe,
              0 == ctx->ef_buf_frame[idx]->ef_frame.height)) {
             av_log(avctx, AV_LOG_DEBUG,"----EOS -----\n");
             ctx->recv_outport_eos = 1;
+            av_usleep(10);
             return AVERROR_EOF;
         }
+        print_frame(avctx, &ctx->ef_buf_frame[idx]->ef_frame);
         av_log(avctx, AV_LOG_DEBUG, "topscodecDecFrameMap success\n");
     } else if (TOPSCODEC_ERROR_BUFFER_EMPTY == ret){
         av_log(avctx, AV_LOG_DEBUG, "TOPSCODEC_ERROR_BUFFER_EMPTY\n");

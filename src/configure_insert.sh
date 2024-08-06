@@ -47,7 +47,7 @@ ${MPEG1}\
 ${MJPEG}" ${C_FILE}
 
 #configure 3
-END3='vaapi_encode_example'
+END3='EXAMPLE_LIST="'
 HW_DECODE_TOPS_EXAMPLE='hw_decode_tops_example\n'
 DECODE_TOPS_EXAMPLE='decode_tops_example\n'
 HW_DECODE_MULTI_TOPS_EXAMPLE='hw_decode_multi_tops_example'

@@ -63,66 +63,118 @@ sed -i "/${PD_END}/i \
 ${PD_TYPE}" ${PIXDESC}
 
 #pixdesc.c 2
-PD_END2='\[AV_PIX_FMT_X2RGB10LE\] = {'
-PD_TYPE2_RGB24P=$(cat << EOF
-        [AV_PIX_FMT_RGB24P] = {\n \
-        .name = "rgb24p",\n \
-        .nb_components = 3,\n \
-        .log2_chroma_w = 0,\n \
-        .log2_chroma_h = 0,\n \
-        .comp = {\n \
-            { 0, 1, 0, 0, 8, 0, 7, 1 },        /* R */\n \
-            { 1, 1, 0, 0, 8, 0, 7, 1 },        /* G */\n \
-            { 2, 1, 0, 0, 8, 0, 7, 1 },        /* B */\n \
-        },\n \
-        .flags = AV_PIX_FMT_FLAG_PLANAR | AV_PIX_FMT_FLAG_RGB,\n \
-    },
+echo "$file" | grep "attribute_deprecated int step_minus1;"
+if [ $? -eq 0 ]; then
+    PD_END2='\[AV_PIX_FMT_X2RGB10LE\] = {'
+    PD_TYPE2_RGB24P=$(cat << EOF
+            [AV_PIX_FMT_RGB24P] = {\n \
+            .name = "rgb24p",\n \
+            .nb_components = 3,\n \
+            .log2_chroma_w = 0,\n \
+            .log2_chroma_h = 0,\n \
+            .comp = {\n \
+                { 0, 1, 0, 0, 8, 0, 7, 1 },        /* R */\n \
+                { 1, 1, 0, 0, 8, 0, 7, 1 },        /* G */\n \
+                { 2, 1, 0, 0, 8, 0, 7, 1 },        /* B */\n \
+            },\n \
+            .flags = AV_PIX_FMT_FLAG_PLANAR | AV_PIX_FMT_FLAG_RGB,\n \
+        },
 EOF
-)
-PD_TYPE2_BGR24P=$(cat << EOF
-        [AV_PIX_FMT_BGR24P] = {\n \
-        .name = "bgr24p",\n \
-        .nb_components = 3,\n \
-        .log2_chroma_w = 0,\n \
-        .log2_chroma_h = 0,\n \
-        .comp = {\n \
-            { 0, 1, 0, 0, 8, 0, 7, 1 },        /* B */\n \
-            { 1, 1, 0, 0, 8, 0, 7, 1 },        /* G */\n \
-            { 2, 1, 0, 0, 8, 0, 7, 1 },        /* R */\n \
-        },\n \
-        .flags = AV_PIX_FMT_FLAG_PLANAR | AV_PIX_FMT_FLAG_RGB,\n \
-    },
+    )
+    PD_TYPE2_BGR24P=$(cat << EOF
+            [AV_PIX_FMT_BGR24P] = {\n \
+            .name = "bgr24p",\n \
+            .nb_components = 3,\n \
+            .log2_chroma_w = 0,\n \
+            .log2_chroma_h = 0,\n \
+            .comp = {\n \
+                { 0, 1, 0, 0, 8, 0, 7, 1 },        /* B */\n \
+                { 1, 1, 0, 0, 8, 0, 7, 1 },        /* G */\n \
+                { 2, 1, 0, 0, 8, 0, 7, 1 },        /* R */\n \
+            },\n \
+            .flags = AV_PIX_FMT_FLAG_PLANAR | AV_PIX_FMT_FLAG_RGB,\n \
+        },
 EOF
-)
+    )
 
-PD_TYPE2_P010LE=$(cat << EOF
-        [AV_PIX_FMT_P010LE] = {\n \
-        .name = "p010le",\n \
-        .nb_components = 3,\n \
-        .log2_chroma_w = 1,\n \
-        .log2_chroma_h = 1,\n \
-        .comp = {\n \
-            { 0, 2, 0, 6, 10, 1, 9, 1 },        /* Y */\n \
-            { 1, 4, 0, 6, 10, 3, 9, 1 },        /* U */\n \
-            { 1, 4, 2, 6, 10, 3, 9, 3 },        /* V */\n \
-        },\n \
-        .flags = AV_PIX_FMT_FLAG_PLANAR,\n \
-    },
+    PD_TYPE2_P010LE=$(cat << EOF
+            [AV_PIX_FMT_P010LE_EF] = {\n \
+            .name = "p010le_ef",\n \
+            .nb_components = 3,\n \
+            .log2_chroma_w = 1,\n \
+            .log2_chroma_h = 1,\n \
+            .comp = {\n \
+                { 0, 2, 0, 6, 10, 1, 9, 1 },        /* Y */\n \
+                { 1, 4, 0, 6, 10, 3, 9, 1 },        /* U */\n \
+                { 1, 4, 2, 6, 10, 3, 9, 3 },        /* V */\n \
+            },\n \
+            .flags = AV_PIX_FMT_FLAG_PLANAR,\n \
+        },
 EOF
-)
+    )
+else
+    PD_END2='\[AV_PIX_FMT_X2RGB10LE\] = {'
+    PD_TYPE2_RGB24P=$(cat << EOF
+            [AV_PIX_FMT_RGB24P] = {\n \
+            .name = "rgb24p",\n \
+            .nb_components = 3,\n \
+            .log2_chroma_w = 0,\n \
+            .log2_chroma_h = 0,\n \
+            .comp = {\n \
+                { 0, 1, 0, 0, 8},        /* R */\n \
+                { 1, 1, 0, 0, 8},        /* G */\n \
+                { 2, 1, 0, 0, 8},        /* B */\n \
+            },\n \
+            .flags = AV_PIX_FMT_FLAG_PLANAR | AV_PIX_FMT_FLAG_RGB,\n \
+        },
+EOF
+    )
+    PD_TYPE2_BGR24P=$(cat << EOF
+            [AV_PIX_FMT_BGR24P] = {\n \
+            .name = "bgr24p",\n \
+            .nb_components = 3,\n \
+            .log2_chroma_w = 0,\n \
+            .log2_chroma_h = 0,\n \
+            .comp = {\n \
+                { 0, 1, 0, 0, 8},        /* B */\n \
+                { 1, 1, 0, 0, 8},        /* G */\n \
+                { 2, 1, 0, 0, 8},        /* R */\n \
+            },\n \
+            .flags = AV_PIX_FMT_FLAG_PLANAR | AV_PIX_FMT_FLAG_RGB,\n \
+        },
+EOF
+    )
+
+    PD_TYPE2_P010LE=$(cat << EOF
+            [AV_PIX_FMT_P010LE_EF] = {\n \
+            .name = "p010le_ef",\n \
+            .nb_components = 3,\n \
+            .log2_chroma_w = 1,\n \
+            .log2_chroma_h = 1,\n \
+            .comp = {\n \
+                { 0, 2, 0, 6, 10},        /* Y */\n \
+                { 1, 4, 0, 6, 10},        /* U */\n \
+                { 1, 4, 2, 6, 10},        /* V */\n \
+            },\n \
+            .flags = AV_PIX_FMT_FLAG_PLANAR,\n \
+        },
+EOF
+    )
+fi
 
 sed -i "/${PD_END2}/i \
 ${PD_TYPE2_RGB24P} ${PD_TYPE2_BGR24P} ${PD_TYPE2_P010LE}" ${PIXDESC}
 
 #pixfmt.h
+PIX_END='AV_PIX_FMT_NB'
 RGB24P='\\tAV_PIX_FMT_RGB24P,     ///< planar RGB 8:8:8, 24bpp, RRR...GGG...BBB...\n'
 BGR24P='\tAV_PIX_FMT_BGR24P,     ///< planar BGR 8:8:8, 24bpp, BBB...GGG...RRR...\n'
 EFCODEC='\tAV_PIX_FMT_EFCCODEC,\n'
 P010LE='\tAV_PIX_FMT_P010LE_EF, ///< like NV12, with 10bpp per component, little-endian\n'
 
-PIX_END='AV_PIX_FMT_NB'
 PIX_FILE='pixfmt.h'
 
+#在AV_PIX_FMT_NB前插入
 sed -i "/${PIX_END}/i \
 ${RGB24P}\
 ${BGR24P}\

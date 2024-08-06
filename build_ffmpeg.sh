@@ -2,7 +2,7 @@
 set -eu -o pipefail
 set +eu +o pipefail
 
-FFMPEG_TAG=${FFMPEG_TAG:-"n4.5-dev"}
+FFMPEG_TAG=${FFMPEG_TAG:-"5.0"}
 FFMPEG_REPO=${FFMPEG_REPO:-"https://github.com/FFmpeg/FFmpeg.git"}
 build_path=$(dirname $(readlink -f "$0"))/build
 cache_tool=""

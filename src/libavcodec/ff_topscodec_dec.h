@@ -78,6 +78,7 @@ typedef struct {
     topscodecRunMode_t run_mode;
     u32_t            stream_buf_size;
     u64_t            stream_addr;
+    u64_t            mem_addr;
 
     enum AVPixelFormat output_pixfmt;
     char *             str_output_pixfmt;
