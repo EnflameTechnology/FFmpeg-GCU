@@ -32,6 +32,8 @@
 #include "libavutil/avassert.h"
 #include "ff_topscodec_dec.h"
 
+static pthread_mutex_t g_mutex = PTHREAD_MUTEX_INITIALIZER;
+
 static enum AVColorPrimaries topscodec_get_color_primaries(const EFBuffer *buf)
 {
     return AVCOL_PRI_UNSPECIFIED;
@@ -404,6 +406,7 @@ int ff_topscodec_avpkt_to_efbuf(const AVPacket *avpkt, EFBuffer *efbuf)
     efpkt->stream_type = TOPSCODEC_NALU_TYPE_UNKNOWN;
 
     if (!ctx->stream_addr){
+        pthread_mutex_lock(&g_mutex);
         tops_ret = topsruntimes->lib_topsExtMallocWithFlags(&tmp, 
                             ctx->stream_buf_size, topsMallocHostAccessable);
         if (topsSuccess != tops_ret) {
@@ -415,6 +418,7 @@ int ff_topscodec_avpkt_to_efbuf(const AVPacket *avpkt, EFBuffer *efbuf)
         reget_addr = 1;
         av_log(avctx, AV_LOG_DEBUG, "malloc stream_addr:0x%lx\n", 
                                                             ctx->stream_addr);
+        pthread_mutex_unlock(&g_mutex);
     }
 
     data = (void*)ctx->stream_addr;
@@ -434,6 +438,7 @@ int ff_topscodec_avpkt_to_efbuf(const AVPacket *avpkt, EFBuffer *efbuf)
 
     /*get device addr*/
     if (reget_addr) {
+        pthread_mutex_lock(&g_mutex);
         tops_ret = topsruntimes->lib_topsPointerGetAttributes(&att, 
                                                     (void *)(ctx->stream_addr));
         if (tops_ret != topsSuccess) {
@@ -441,6 +446,7 @@ int ff_topscodec_avpkt_to_efbuf(const AVPacket *avpkt, EFBuffer *efbuf)
             return AVERROR(EPERM);
         }
         ctx->mem_addr  = (u64_t)att.device_pointer;
+        pthread_mutex_unlock(&g_mutex);
     }
     efpkt->mem_addr  = ctx->mem_addr;
     efpkt->alloc_len = ctx->stream_buf_size;

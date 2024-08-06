@@ -119,7 +119,7 @@ static const char* Sync_type2str(Sync_type type) {
 }
 
 static void synchoronize(Sync_type type) {
-    av_log(NULL, AV_LOG_INFO, "synchoronize:%s\n", Sync_type2str(type));
+    av_log(NULL, AV_LOG_DEBUG, "synchoronize:%s\n", Sync_type2str(type));
     if (type == SYNC_START)
         pseudo_barrier_wait(&g_barrier_start);
     else if (type == SYNC_FRAME)
