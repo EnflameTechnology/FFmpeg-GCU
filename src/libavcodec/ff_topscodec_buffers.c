@@ -254,8 +254,9 @@ int ff_topscodec_efbuf_to_avframe(const EFBuffer *efbuf, AVFrame *avframe)
                     av_pix_fmt_count_planes(avframe->format));
             return AVERROR_BUG;
         }
-
+        pthread_mutex_lock(&g_mutex);
         av_hwframe_get_buffer(log_ctx->hw_frames_ctx, avframe, 0);
+        pthread_mutex_unlock(&g_mutex);
 
         for (int i = 0; i < efbuf->ef_frame.plane_num; i++) {
             avframe->linesize[i] = efbuf->ef_frame.plane[i].stride;
