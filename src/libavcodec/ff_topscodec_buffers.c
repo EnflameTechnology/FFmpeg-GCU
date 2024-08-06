@@ -425,6 +425,7 @@ int ff_topscodec_avpkt_to_efbuf(const AVPacket *avpkt, EFBuffer *efbuf)
     
     if (avpkt->size > 0 && avpkt->data && data){
         // memcpy(data, avpkt->data, avpkt->size);
+        pthread_mutex_lock(&g_mutex);
         tops_ret = topsruntimes->lib_topsMemcpyHtoD(data, avpkt->data, 
                                                     avpkt->size);
         if (tops_ret != topsSuccess) {
@@ -434,6 +435,7 @@ int ff_topscodec_avpkt_to_efbuf(const AVPacket *avpkt, EFBuffer *efbuf)
         av_log(avctx, AV_LOG_DEBUG, 
                     "h2d(topsMemcpyHtoD): host %p -> dev %p, size %u \n",
                     avpkt->data, data, efpkt->data_len);
+        pthread_mutex_unlock(&g_mutex);
     }
 
     /*get device addr*/
