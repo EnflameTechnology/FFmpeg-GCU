@@ -30,7 +30,7 @@
 #define MAX_FRAME_NUM 10
 
 typedef struct {
-    AVClass *avclass;
+    AVClass* avclass;
     int      device_id;
     int      card_id;
     int      hw_id;
@@ -57,10 +57,10 @@ typedef struct {
         /*!< Downscale mode: 0-Bilinear, 1-Nearest*/
         int mode;
     } resize;
-    int rotation;/*90/180/270*/
+    int rotation; /*90/180/270*/
 
-    u32_t sfo;          /*!< Frame sampling interval*/
-    u32_t sf_idr;       /*!< IDR Frame sampling*/
+    u32_t sfo;    /*!< Frame sampling interval*/
+    u32_t sf_idr; /*!< IDR Frame sampling*/
 
     int in_width;
     int in_height;
@@ -73,31 +73,31 @@ typedef struct {
 
     topscodecHandle_t  handle;
     topscodecDecCaps_t caps;
-    char *           color_space; /*topscodecColorSpace_t*/
+    char*              color_space; /*topscodecColorSpace_t*/
     topscodecType_t    codec_type;
     topscodecRunMode_t run_mode;
-    u32_t            stream_buf_size;
-    u64_t            stream_addr;
-    u64_t            mem_addr;
+    u32_t              stream_buf_size;
+    u64_t              stream_addr;
+    u64_t              mem_addr;
 
     enum AVPixelFormat output_pixfmt;
-    char *             str_output_pixfmt;
+    char*              str_output_pixfmt;
 
-    AVBufferRef *      hwdevice;
-    AVBufferRef *      hwframe;
-    AVHWFramesContext *hwframes_ctx;
-    AVCodecContext *   avctx;
+    AVBufferRef*       hwdevice;
+    AVBufferRef*       hwframe;
+    AVHWFramesContext* hwframes_ctx;
+    AVCodecContext*    avctx;
 
     AVPacket av_pkt;
     AVFrame  mid_frame;
-    AVFrame  *last_received_frame[MAX_FRAME_NUM];
-    int      idx_put; //for last_received_frame
-    int      idx_get; //for last_received_frame
+    AVFrame* last_received_frame[MAX_FRAME_NUM];
+    int      idx_put;  // for last_received_frame
+    int      idx_get;  // for last_received_frame
 
-    EFBuffer *ef_buf_frame[MAX_FRAME_NUM];
-    EFBuffer *ef_buf_pkt;
+    EFBuffer* ef_buf_frame[MAX_FRAME_NUM];
+    EFBuffer* ef_buf_pkt;
 
-    int64_t last_send_pkt_time;
+    int64_t      last_send_pkt_time;
     volatile int decoder_start;
     volatile int decoder_init_flag;
 
@@ -105,11 +105,11 @@ typedef struct {
     unsigned long long total_frame_count;
     unsigned long long total_packet_count;
 
-    TopsCodecFunctions *topscodec_lib_ctx;
-    TopsRuntimesFunctions *topsruntime_lib_ctx;
-    int           recv_first_frame;
-    int           recv_outport_eos;
-    int           first_packet;
+    TopsCodecFunctions*    topscodec_lib_ctx;
+    TopsRuntimesFunctions* topsruntime_lib_ctx;
+    int                    recv_first_frame;
+    int                    recv_outport_eos;
+    int                    first_packet;
 } EFCodecDecContext_t;
 
 #endif  // AVCODEC_EF_TOPSCODEC_DEC_H

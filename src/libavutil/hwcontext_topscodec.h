@@ -27,10 +27,10 @@
  * This struct is allocated as AVHWDeviceContext.hwctx.
  */
 typedef struct AVTOPSCodecDeviceContext {
-    TopsRuntimesFunctions *topsruntime_lib_ctx;
-    AVBufferRef *dynlink_ref;
-    int reserved[4];
-    void* reserved2[4];
+    TopsRuntimesFunctions* topsruntime_lib_ctx;
+    AVBufferRef*           dynlink_ref;
+    int                    reserved[4];
+    void*                  reserved2[4];
 } AVTOPSCodecDeviceContext;
 
-#endif  // AVUTIL_HWCONTEXT_TOPSCODEC_H 
+#endif  // AVUTIL_HWCONTEXT_TOPSCODEC_H

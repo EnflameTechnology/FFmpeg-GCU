@@ -24,25 +24,25 @@
 #include <stdatomic.h>
 #include <stddef.h>
 
+#include <tops/dynlink_tops_loader.h>
 #include "libavutil/buffer.h"
 #include "libavutil/frame.h"
 #include "packet.h"
-#include <tops/dynlink_tops_loader.h>
 
-typedef struct{
+typedef struct {
     /* each buffer needs to have a reference to its context */
-    AVCodecContext *avctx;
+    AVCodecContext* avctx;
     /* reference back to EFCodecDecContext_t */
-    void *ef_context;
+    void* ef_context;
 
     /* This object is refcounted per-plane, so we need to keep track
      * of how many context-refs we are holding. */
-    AVBufferRef *context_ref;
+    AVBufferRef* context_ref;
     atomic_uint  context_refcount;
 
-    AVPacket *av_pkt;
+    AVPacket* av_pkt;
     /* Reference to a frame. Only used during encoding */
-    AVFrame *av_frame;
+    AVFrame* av_frame;
     /*
     for decodeing , libavcodec do not use topMalloc() to specify ef_frame.plane.
     dev_addr space,caller use the codec core addr.
@@ -68,7 +68,7 @@ typedef struct{
  * @returns 0 in case of success, AVERROR(EINVAL) if the number of planes is
  * incorrect,AVERROR(ENOMEM) if the AVBufferRef can't be created.
  */
-int ff_topscodec_efbuf_to_avframe(const EFBuffer *efbuf, AVFrame *avframe);
+int ff_topscodec_efbuf_to_avframe(const EFBuffer* efbuf, AVFrame* avframe);
 
 /**
  * Extracts the data from an AVFrame to a EFBuffer
@@ -78,7 +78,7 @@ int ff_topscodec_efbuf_to_avframe(const EFBuffer *efbuf, AVFrame *avframe);
  *
  * @returns 0 in case of success, a negative AVERROR code otherwise
  */
-int ff_topscodec_avframe_to_efbuf(const AVFrame *avframe, EFBuffer *efbuf);
+int ff_topscodec_avframe_to_efbuf(const AVFrame* avframe, EFBuffer* efbuf);
 
 /**
  * Extracts the data from a EFBuffer to an AVPacket
@@ -90,7 +90,7 @@ int ff_topscodec_avframe_to_efbuf(const AVFrame *avframe, EFBuffer *efbuf);
  * incorrect, AVERROR(ENOMEM) if the AVBufferRef can't be created.
  *
  */
-int ff_topscodec_efbuf_to_avpkt(const EFBuffer *efbuf, AVPacket *avpkt);
+int ff_topscodec_efbuf_to_avpkt(const EFBuffer* efbuf, AVPacket* avpkt);
 
 /**
  * Extracts the data from an AVPacket to a EFBuffer
@@ -100,11 +100,10 @@ int ff_topscodec_efbuf_to_avpkt(const EFBuffer *efbuf, AVPacket *avpkt);
  *
  * @returns 0 in case of success, a negative AVERROR code otherwise
  */
-int ff_topscodec_avpkt_to_efbuf(const AVPacket *pkt, EFBuffer *efbuf);
-
+int ff_topscodec_avpkt_to_efbuf(const AVPacket* pkt, EFBuffer* efbuf);
 
 /* useful pix trans func */
 topscodecPixelFormat_t avpixfmt_2_topspixfmt(enum AVPixelFormat fmt);
-enum AVPixelFormat topspixfmt_2_avpixfmt(topscodecPixelFormat_t fmt);
+enum AVPixelFormat     topspixfmt_2_avpixfmt(topscodecPixelFormat_t fmt);
 
 #endif  // AVCODEC_EF_BUFFERS_H
