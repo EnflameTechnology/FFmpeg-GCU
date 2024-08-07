@@ -25,6 +25,7 @@
 #include <stddef.h>
 
 #include <tops/dynlink_tops_loader.h>
+#include "libavcodec/avcodec.h"
 #include "libavutil/buffer.h"
 #include "libavutil/frame.h"
 #include "packet.h"

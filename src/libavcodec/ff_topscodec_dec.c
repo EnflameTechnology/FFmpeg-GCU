@@ -162,7 +162,7 @@ static void print_frame(AVCodecContext* avctx, topscodecFrame_t* frame) {
            frame->pic_type);
     av_log(avctx, AV_LOG_DEBUG, "\t pixel_fmt(%d)                \t\n",
            frame->pixel_format);
-    av_log(avctx, AV_LOG_DEBUG, "\t pts(%d)                      \t\n",
+    av_log(avctx, AV_LOG_DEBUG, "\t pts(%lu)                     \t\n",
            frame->pts);
     av_log(avctx, AV_LOG_DEBUG, "\t                             }\t\n");
 }

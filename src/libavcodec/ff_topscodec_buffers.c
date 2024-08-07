@@ -276,7 +276,7 @@ int ff_topscodec_efbuf_to_avframe(const EFBuffer* efbuf, AVFrame* avframe) {
             if (ret != topsSuccess) {
                 av_log(ctx, AV_LOG_ERROR,
                        "d2x: host %p -> dev 0x%lx, size %lu\n", data[i],
-                       avframe->data[i], planesizes[i]);
+                       (void*)avframe->data[i], planesizes[i]);
                 av_log(ctx, AV_LOG_ERROR,
                        "topsMemcpyDtoD error occur, func: %s, "
                        "line: %d\n",

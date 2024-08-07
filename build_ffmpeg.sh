@@ -206,7 +206,6 @@ echo "configure FFmpeg"
     --enable-swscale \
     --enable-nvdec \
     --enable-cuvid \
-    --enable-topscodec \
     --enable-decoder=vc1 \
     --enable-decoder=vc1_topscodec \
     --enable-decoder=vc1_cuvid \
