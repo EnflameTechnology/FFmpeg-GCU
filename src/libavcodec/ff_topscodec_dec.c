@@ -309,7 +309,7 @@ static av_cold int topscodec_decode_init(AVCodecContext* avctx) {
             return AVERROR_BUG;
     }
 
-    pthread_mutex_lock(&g_dec_mutex);
+    // pthread_mutex_lock(&g_dec_mutex);
     ret = topscodec_load_functions(&ctx->topscodec_lib_ctx);
     if (ret != 0) {
         av_log(avctx, AV_LOG_ERROR,
@@ -317,7 +317,7 @@ static av_cold int topscodec_decode_init(AVCodecContext* avctx) {
         ret = AVERROR(EINVAL);
         goto error;
     }
-    pthread_mutex_unlock(&g_dec_mutex);
+    // pthread_mutex_unlock(&g_dec_mutex);
 
     topscodec_get_version(avctx);
     memset(&ctx->caps, 0, sizeof(ctx->caps));
@@ -760,10 +760,10 @@ static av_cold int topscodec_decode_close(AVCodecContext* avctx) {
     }
 
     if (ctx->topscodec_lib_ctx) {
-        pthread_mutex_lock(&g_dec_mutex);
+        // pthread_mutex_lock(&g_dec_mutex);
         topscodec_free_functions(&ctx->topscodec_lib_ctx);
         av_log(avctx, AV_LOG_DEBUG, "topscodec_lib_ctx free\n");
-        pthread_mutex_unlock(&g_dec_mutex);
+        // pthread_mutex_unlock(&g_dec_mutex);
     }
 
     if (ctx->hwdevice) {

@@ -247,9 +247,9 @@ int ff_topscodec_efbuf_to_avframe(const EFBuffer* efbuf, AVFrame* avframe) {
                    av_pix_fmt_count_planes(avframe->format));
             return AVERROR_BUG;
         }
-        pthread_mutex_lock(&g_buf_mutex);
+        // pthread_mutex_lock(&g_buf_mutex);
         av_hwframe_get_buffer(log_ctx->hw_frames_ctx, avframe, 0);
-        pthread_mutex_unlock(&g_buf_mutex);
+        // pthread_mutex_unlock(&g_buf_mutex);
 
         for (int i = 0; i < efbuf->ef_frame.plane_num; i++) {
             avframe->linesize[i] = efbuf->ef_frame.plane[i].stride;
@@ -399,13 +399,13 @@ int ff_topscodec_avpkt_to_efbuf(const AVPacket* avpkt, EFBuffer* efbuf) {
     efpkt->stream_type = TOPSCODEC_NALU_TYPE_UNKNOWN;
 
     if (!ctx->stream_addr) {
-        pthread_mutex_lock(&g_buf_mutex);
+        // pthread_mutex_lock(&g_buf_mutex);
         tops_ret = topsruntimes->lib_topsExtMallocWithFlags(
             &tmp, ctx->stream_buf_size, topsMallocHostAccessable);
         if (topsSuccess != tops_ret) {
             av_log(avctx, AV_LOG_ERROR, "Error, topsMalloc failed, ret(%d)\n",
                    tops_ret);
-            pthread_mutex_unlock(&g_buf_mutex);
+            // pthread_mutex_unlock(&g_buf_mutex);
             return AVERROR(EPERM);
         }
         ctx->stream_addr = (uint64_t)tmp;
@@ -415,29 +415,29 @@ int ff_topscodec_avpkt_to_efbuf(const AVPacket* avpkt, EFBuffer* efbuf) {
             &att, (void*)(ctx->stream_addr));
         if (tops_ret != topsSuccess) {
             av_log(avctx, AV_LOG_ERROR, "topsPointerGetAttributes failed!\n");
-            pthread_mutex_unlock(&g_buf_mutex);
+            // pthread_mutex_unlock(&g_buf_mutex);
             return AVERROR(EPERM);
         }
         ctx->mem_addr = (u64_t)att.device_pointer;
-        pthread_mutex_unlock(&g_buf_mutex);
+        // pthread_mutex_unlock(&g_buf_mutex);
     }
 
     data = (void*)ctx->stream_addr;
 
     if (avpkt->size > 0 && avpkt->data && data) {
         // memcpy(data, avpkt->data, avpkt->size);
-        pthread_mutex_lock(&g_buf_mutex);
+        // pthread_mutex_lock(&g_buf_mutex);
         tops_ret =
             topsruntimes->lib_topsMemcpyHtoD(data, avpkt->data, avpkt->size);
         if (tops_ret != topsSuccess) {
             av_log(avctx, AV_LOG_ERROR, "topsMemcpyHtoD failed!\n");
-            pthread_mutex_unlock(&g_buf_mutex);
+            // pthread_mutex_unlock(&g_buf_mutex);
             return AVERROR(EPERM);
         }
         av_log(avctx, AV_LOG_DEBUG,
                "h2d(topsMemcpyHtoD): host %p -> dev %p, size %u \n",
                avpkt->data, data, efpkt->data_len);
-        pthread_mutex_unlock(&g_buf_mutex);
+        // pthread_mutex_unlock(&g_buf_mutex);
     }
 
     efpkt->mem_addr  = ctx->mem_addr;

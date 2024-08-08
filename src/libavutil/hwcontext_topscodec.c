@@ -271,12 +271,12 @@ static int topscodec_device_init(AVHWDeviceContext* device_ctx) {
 
 static void topscodec_device_uninit(AVHWDeviceContext* device_ctx) {
     AVTOPSCodecDeviceContext* ctx = device_ctx->hwctx;
-    pthread_mutex_lock(&g_hw_mutex);
+    // pthread_mutex_lock(&g_hw_mutex);
     if (ctx->topsruntime_lib_ctx) {
         topsruntimes_free_functions(&ctx->topsruntime_lib_ctx);
         av_log(NULL, AV_LOG_DEBUG, "topsruntimes_free_functions success\n");
     }
-    pthread_mutex_unlock(&g_hw_mutex);
+    // pthread_mutex_unlock(&g_hw_mutex);
 }
 
 /*TODO*/
@@ -287,12 +287,12 @@ static int topscodec_device_create(AVHWDeviceContext* device_ctx,
     int                       device_idx = 0;
     int                       ret        = 0;
 
-    pthread_mutex_lock(&g_hw_mutex);
+    // pthread_mutex_lock(&g_hw_mutex);
     ret = topsruntimes_load_functions(&ctx->topsruntime_lib_ctx);
     if (ret != 0) {
         av_log(NULL, AV_LOG_ERROR,
                "Error, topsruntime_lib_ctx failed, ret(%d)\n", ret);
-        pthread_mutex_unlock(&g_hw_mutex);
+        // pthread_mutex_unlock(&g_hw_mutex);
         return ret;
     }
 
@@ -304,10 +304,10 @@ static int topscodec_device_create(AVHWDeviceContext* device_ctx,
                "Error, topscodec_set_device[%d] failed, ret(%d)\n", device_idx,
                ret);
         ret = AVERROR(EINVAL);
-        pthread_mutex_unlock(&g_hw_mutex);
+        // pthread_mutex_unlock(&g_hw_mutex);
         return ret;
     }
-    pthread_mutex_unlock(&g_hw_mutex);
+    // pthread_mutex_unlock(&g_hw_mutex);
     return 0;
 }
 
