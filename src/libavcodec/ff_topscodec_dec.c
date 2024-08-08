@@ -49,7 +49,7 @@
 #include "libavutil/hwcontext.h"
 #include "libavutil/hwcontext_topscodec.h"
 
-static pthread_mutex_t g_dec_mutex = PTHREAD_MUTEX_INITIALIZER;
+// static pthread_mutex_t g_dec_mutex = PTHREAD_MUTEX_INITIALIZER;
 #define FF_EFC_MAJPR_VERSION 1
 #define FF_EFC_MINOR_VERSION 0
 #define FF_EFC_PATCH_VERSION 1
