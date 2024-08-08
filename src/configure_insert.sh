@@ -6,6 +6,12 @@ HW_DECODE_TOPS='topscodec'
 
 C_FILE='configure'
 
+ if grep -m 1 -Fxq  "topscodec" $C_FILE;then
+    echo "find topscodec exit"
+    exit 0
+ fi
+
+#configure 1
 sed -i "/${END}/a \
 ${HW_DECODE_TOPS}" ${C_FILE}
 

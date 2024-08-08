@@ -165,17 +165,26 @@ fi
 
 echo "copy FFmpeg GCU Plugin files info FFmpeg source tree"
 cd $ffmpeg_dir
+
 cp ${src_path}/src/configure* ${ffmpeg_dir}/
-pushd
-echo "add hwaccel to configure"
+pushd ${ffmpeg_dir}/
+echo "add tops hwaccel to configure"
 ${ffmpeg_dir}/configure_insert.sh # add hwaccel to configure
 popd
+
+#replace cavsvideodec.c
 cp ${src_path}/src/libavformat/* ${ffmpeg_dir}/libavformat/
+pushd ${ffmpeg_dir}/libavformat/
+echo "add CAVS_PROFILE_GUANDIAN to cavsvideodec.c"
+${ffmpeg_dir}/libavformat/cavsvideodec_insert.sh # add CAVS_PROFILE_GUANDIAN to cavsvideodec.c
+popd
+
 cp ${src_path}/src/libavcodec/* ${ffmpeg_dir}/libavcodec/
 pushd ${ffmpeg_dir}/libavcodec
 echo "add codec to allcodecs.c"
 ${ffmpeg_dir}/libavcodec/avcodec_insert.sh # add codec to allcodecs.c
 popd
+
 cp ${src_path}/src/libavutil/* ${ffmpeg_dir}/libavutil/
 pushd ${ffmpeg_dir}/libavutil
 echo "add pixfmt to pixdesc.c"
@@ -206,6 +215,7 @@ echo "configure FFmpeg"
     --enable-swscale \
     --enable-nvdec \
     --enable-cuvid \
+    --enable-topscodec \
     --enable-decoder=vc1 \
     --enable-decoder=vc1_topscodec \
     --enable-decoder=vc1_cuvid \

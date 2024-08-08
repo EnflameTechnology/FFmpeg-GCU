@@ -1,5 +1,6 @@
 #! /bin/bash
 
+
 # Add the following line to the end of the file
 END='extern \(const \)\?AVCodec ff_zmbv_decoder;'
 AVS2='extern const AVCodec ff_avs2_topscodec_decoder;\n'
@@ -33,6 +34,12 @@ M_VP9='OBJS-$(CONFIG_VP9_TOPSCODEC_DECODER)   += ff_topscodec_dec.o\n'
 M_END_SUB='OBJS-$(CONFIG_WMV2DSP)                 += wmv2dsp.o'
 M_BUF='OBJS-$(CONFIG_TOPSCODEC)               += ff_topscodec_buffers.o\n'
 M_FILE='Makefile'
+
+ if grep -Fxq "topscodec" $FILE_CODEC;then
+    echo "find topscodec exit"
+    exit 0
+ fi
+
 
 sed -i "/${END}/a \
 ${AVS2}\
