@@ -56,10 +56,10 @@ static int init_decode(const char* in_file, const char* out_file,
                        const char* card_id) {
     int            ret      = -1;
     AVStream*      video    = NULL;
-    AVCodec*       p_codec  = NULL;
     AVDictionary*  options  = NULL;
     AVDictionary*  dec_opts = NULL;
     AVInputFormat* fmt      = NULL;
+    const AVCodec* p_codec  = NULL;
     const char*    tmp_name = NULL;
 
     if ((ret = avformat_network_init()) != 0) {

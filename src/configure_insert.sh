@@ -2,11 +2,13 @@
 
 # Add the following line to the end of the file
 END='HWACCEL_AUTODETECT_LIBRARY_LIST="'
+END1='--disable-cuvid*'
 HW_DECODE_TOPS='topscodec'
+DISABLE='  --disable-topscodec        disable topscodec support [autodetect]'
 
 C_FILE='configure'
 
- if grep -m 1 -Fxq  "topscodec" $C_FILE;then
+ if grep -m 1 -Fq  "topscodec" $C_FILE;then
     echo "find topscodec exit"
     exit 0
  fi
@@ -14,6 +16,9 @@ C_FILE='configure'
 #configure 1
 sed -i "/${END}/a \
 ${HW_DECODE_TOPS}" ${C_FILE}
+
+sed -i "/${END1}/a \
+${DISABLE}" ${C_FILE}
 
 #configure 2
 END2='av1_qsv_decoder_select="qsvdec"'

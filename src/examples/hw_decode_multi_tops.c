@@ -206,7 +206,7 @@ static int end_with(const char* str, const char* suffix) {
     }
 
 static AVCodec* create_decoder(enum AVCodecID codec_id) {
-    AVCodec* decoder = NULL;
+    const AVCodec* decoder = NULL;
     switch (codec_id) {
         case AV_CODEC_ID_H264:
             decoder = avcodec_find_decoder_by_name("h264_topscodec");

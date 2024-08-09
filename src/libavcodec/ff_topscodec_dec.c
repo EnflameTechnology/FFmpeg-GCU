@@ -48,6 +48,13 @@
 #include "internal.h"
 #include "libavutil/hwcontext.h"
 #include "libavutil/hwcontext_topscodec.h"
+#include "version.h"
+
+#if AV_VERSION_INT(LIBAVCODEC_VERSION_MAJOR, LIBAVCODEC_VERSION_MINOR, \
+                   LIBAVCODEC_VERSION_MICRO) > AV_VERSION_INT(59, 18, 100)
+#include "codec_internal.h"
+#include "config_components.h"
+#endif
 
 // static pthread_mutex_t g_dec_mutex = PTHREAD_MUTEX_INITIALIZER;
 #define FF_EFC_MAJPR_VERSION 1
@@ -1217,6 +1224,8 @@ static const AVCodecHWConfigInternal* topscodec_hw_configs[] = {
         .version    = LIBAVUTIL_VERSION_INT,              \
     };
 
+#if AV_VERSION_INT(LIBAVCODEC_VERSION_MAJOR, LIBAVCODEC_VERSION_MINOR, \
+                   LIBAVCODEC_VERSION_MICRO) <= AV_VERSION_INT(59, 18, 100)
 #define TOPSCODECDEC(NAME, LONGNAME, CODEC, BSF_NAME)                     \
     TOPSCODEC_CLASS(NAME)                                                 \
     const AVCodec ff_##NAME##_topscodec_decoder = {                       \
@@ -1245,6 +1254,37 @@ static const AVCodecHWConfigInternal* topscodec_hw_configs[] = {
         .hw_configs   = topscodec_hw_configs,                             \
         .wrapper_name = "topscodec",                                      \
     }
+#else
+#define TOPSCODECDEC(NAME, LONGNAME, CODEC, BSF_NAME)                     \
+    TOPSCODEC_CLASS(NAME)                                                 \
+    const FFCodec ff_##NAME##_topscodec_decoder = {                       \
+        .p.name           = #NAME "_topscodec",                           \
+        .p.long_name      = NULL_IF_CONFIG_SMALL(#NAME "TOPSCODEC"),      \
+        .p.type           = AVMEDIA_TYPE_VIDEO,                           \
+        .p.id             = CODEC,                                        \
+        .priv_data_size   = sizeof(EFCodecDecContext_t),                  \
+        .p.priv_class     = &topscodec_##NAME##_dec_class,                \
+        .init             = topscodec_decode_init,                        \
+        .cb_type          = FF_CODEC_CB_TYPE_RECEIVE_FRAME,               \
+        .cb.receive_frame = topscodec_receive_frame,                      \
+        .close            = topscodec_decode_close,                       \
+        .bsfs             = BSF_NAME,                                     \
+        .p.capabilities   = AV_CODEC_CAP_HARDWARE | AV_CODEC_CAP_DELAY |  \
+                          AV_CODEC_CAP_AVOID_PROBING,                     \
+        .caps_internal =                                                  \
+            FF_CODEC_CAP_SETS_PKT_DTS | FF_CODEC_CAP_INIT_CLEANUP,        \
+        .p.pix_fmts =                                                     \
+            (const enum AVPixelFormat[]){                                 \
+                AV_PIX_FMT_EFCCODEC, AV_PIX_FMT_YUV420P, AV_PIX_FMT_NV12, \
+                AV_PIX_FMT_NV21, AV_PIX_FMT_RGB24, AV_PIX_FMT_RGB24P,     \
+                AV_PIX_FMT_BGR24, AV_PIX_FMT_BGR24P, AV_PIX_FMT_YUV444P,  \
+                AV_PIX_FMT_YUV444P10LE, AV_PIX_FMT_P010LE_EF,             \
+                AV_PIX_FMT_P010LE, AV_PIX_FMT_GRAY8, AV_PIX_FMT_GRAY10,   \
+                AV_PIX_FMT_NONE},                                         \
+        .hw_configs   = topscodec_hw_configs,                             \
+        .p.wrapper_name = "topscodec",                                      \
+    }
+#endif
 
 #if CONFIG_H263_TOPSCODEC_DECODER
 TOPSCODECDEC(h263, "H.263", AV_CODEC_ID_H263, NULL);

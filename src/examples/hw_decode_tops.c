@@ -224,7 +224,7 @@ int main(int argc, char* argv[]) {
     AVFormatContext* input_ctx = NULL;
     AVStream*        video     = NULL;
     AVCodecContext*  avctx     = NULL;
-    AVCodec*         decoder   = NULL;
+    const AVCodec*   decoder   = NULL;
     AVDictionary*    dec_opts  = NULL;
 
     int            i            = 0;
