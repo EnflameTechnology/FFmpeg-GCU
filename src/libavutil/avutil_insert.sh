@@ -6,7 +6,7 @@ END='extern const HWContextType ff_hwcontext_type_cuda;'
 TOPSCODEC='extern const HWContextType ff_hwcontext_type_topscodec;/*enflame*/'
 FILE='hwcontext_internal.h'
 
- if grep  -Fxq "topscodec" $FILE;then
+ if grep  -Fq "topscodec" $FILE;then
     echo "find topscodec exit"
     exit 0
  fi
