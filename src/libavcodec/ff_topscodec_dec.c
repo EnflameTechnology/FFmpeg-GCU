@@ -908,15 +908,15 @@ static int topscodec_receive_frame(AVCodecContext* avctx, AVFrame* frame) {
     /*when avpkt.size==0, means eof*/
     av_log(avctx, AV_LOG_DEBUG, "topscodecDecodeStream,pkt_size=%d\n",
            ctx->av_pkt.size);
-    pthread_mutex_lock(&g_dec_mutex);
     if (ctx->first_packet) {
-        ctx->first_packet = 0;
         if (avctx->extradata_size) {
             AVPacket p;
             p.data = avctx->extradata;
             p.size = avctx->extradata_size;
             p.pts  = 0;
+            pthread_mutex_lock(&g_dec_mutex);
             ff_topscodec_avpkt_to_efbuf(&p, ctx->ef_buf_pkt);
+            pthread_mutex_unlock(&g_dec_mutex);
             print_stream(avctx, &ctx->ef_buf_pkt->ef_pkt);
             do {
                 ret = ctx->topscodec_lib_ctx->lib_topscodecDecodeStream(
@@ -937,9 +937,8 @@ static int topscodec_receive_frame(AVCodecContext* avctx, AVFrame* frame) {
                 }
             } while (ret == TOPSCODEC_ERROR_TIMEOUT);
         }
-        
+       ctx->first_packet = 0; 
     }
-    pthread_mutex_unlock(&g_dec_mutex);
     ff_topscodec_avpkt_to_efbuf(&ctx->av_pkt, ctx->ef_buf_pkt);
     ctx->total_packet_count++;
     print_stream(avctx, &ctx->ef_buf_pkt->ef_pkt);
