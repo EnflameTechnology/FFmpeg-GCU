@@ -370,15 +370,15 @@ int ff_topscodec_efbuf_to_avpkt(const EFBuffer* efbuf, AVPacket* avpkt) {
 }
 
 int ff_topscodec_avpkt_to_efbuf(const AVPacket* avpkt, EFBuffer* efbuf) {
-    void*                  data         = NULL;
-    void*                  tmp          = NULL;
+    void* data = NULL;
+    // void*                  tmp          = NULL;
     topscodecStream_t*     efpkt        = NULL;
     AVCodecContext*        avctx        = NULL;
     EFCodecDecContext_t*   ctx          = NULL;
     TopsRuntimesFunctions* topsruntimes = NULL;
 
-    topsError_t            tops_ret;
-    topsPointerAttribute_t att;
+    topsError_t tops_ret;
+    // topsPointerAttribute_t att;
 
     av_assert0(avpkt);
     av_assert0(efbuf);
@@ -398,29 +398,31 @@ int ff_topscodec_avpkt_to_efbuf(const AVPacket* avpkt, EFBuffer* efbuf) {
 
     efpkt->stream_type = TOPSCODEC_NALU_TYPE_UNKNOWN;
 
-    if (!ctx->stream_addr) {
-        // pthread_mutex_lock(&g_buf_mutex);
-        tops_ret = topsruntimes->lib_topsExtMallocWithFlags(
-            &tmp, ctx->stream_buf_size, topsMallocHostAccessable);
-        if (topsSuccess != tops_ret) {
-            av_log(avctx, AV_LOG_ERROR, "Error, topsMalloc failed, ret(%d)\n",
-                   tops_ret);
-            // pthread_mutex_unlock(&g_buf_mutex);
-            return AVERROR(EPERM);
-        }
-        ctx->stream_addr = (uint64_t)tmp;
-        av_log(avctx, AV_LOG_DEBUG, "malloc stream_addr:0x%lx\n",
-               ctx->stream_addr);
-        tops_ret = topsruntimes->lib_topsPointerGetAttributes(
-            &att, (void*)(ctx->stream_addr));
-        if (tops_ret != topsSuccess) {
-            av_log(avctx, AV_LOG_ERROR, "topsPointerGetAttributes failed!\n");
-            // pthread_mutex_unlock(&g_buf_mutex);
-            return AVERROR(EPERM);
-        }
-        ctx->mem_addr = (u64_t)att.device_pointer;
-        // pthread_mutex_unlock(&g_buf_mutex);
-    }
+    // if (!ctx->stream_addr) {
+    //     // pthread_mutex_lock(&g_buf_mutex);
+    //     tops_ret = topsruntimes->lib_topsExtMallocWithFlags(
+    //         &tmp, ctx->stream_buf_size, topsMallocHostAccessable);
+    //     if (topsSuccess != tops_ret) {
+    //         av_log(avctx, AV_LOG_ERROR, "Error, topsMalloc failed,
+    //         ret(%d)\n",
+    //                tops_ret);
+    //         // pthread_mutex_unlock(&g_buf_mutex);
+    //         return AVERROR(EPERM);
+    //     }
+    //     ctx->stream_addr = (uint64_t)tmp;
+    //     av_log(avctx, AV_LOG_DEBUG, "malloc stream_addr:0x%lx\n",
+    //            ctx->stream_addr);
+    //     tops_ret = topsruntimes->lib_topsPointerGetAttributes(
+    //         &att, (void*)(ctx->stream_addr));
+    //     if (tops_ret != topsSuccess) {
+    //         av_log(avctx, AV_LOG_ERROR, "topsPointerGetAttributes
+    //         failed!\n");
+    //         // pthread_mutex_unlock(&g_buf_mutex);
+    //         return AVERROR(EPERM);
+    //     }
+    //     ctx->mem_addr = (u64_t)att.device_pointer;
+    //     // pthread_mutex_unlock(&g_buf_mutex);
+    // }
 
     data = (void*)ctx->stream_addr;
 

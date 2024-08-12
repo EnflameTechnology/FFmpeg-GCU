@@ -200,6 +200,9 @@ static av_cold int topscodec_decode_init(AVCodecContext* avctx) {
     AVTOPSCodecDeviceContext* device_hwctx          = NULL;
     topscodecDecCreateInfo_t  codec_info            = {0};
     topscodecDecParams_t      params                = {0};
+    topsPointerAttribute_t    att                   = {0};
+    topsError_t               tops_ret              = TOPSCODEC_SUCCESS;
+    void*                     tmp                   = NULL;
     char                      card_idx[sizeof(int)] = {0};
 
     int ret            = 0;
@@ -553,8 +556,32 @@ static av_cold int topscodec_decode_init(AVCodecContext* avctx) {
             break;
     }
 
-    bitstream_size       = ceil((probed_width * probed_height) * 1.25);
+    bitstream_size = ceil((probed_width * probed_height) * 1.25);
+
     ctx->stream_buf_size = FFALIGN(bitstream_size, 4096);
+    if (!ctx->stream_addr) {
+        // pthread_mutex_lock(&g_buf_mutex);
+        tops_ret = ctx->topsruntime_lib_ctx->lib_topsExtMallocWithFlags(
+            &tmp, ctx->stream_buf_size, topsMallocHostAccessable);
+        if (topsSuccess != tops_ret) {
+            av_log(avctx, AV_LOG_ERROR, "Error, topsMalloc failed, ret(%d)\n",
+                   tops_ret);
+            ret = AVERROR(EPERM);
+            goto error;
+        }
+        ctx->stream_addr = (uint64_t)tmp;
+        av_log(avctx, AV_LOG_DEBUG, "malloc stream_addr:0x%lx\n",
+               ctx->stream_addr);
+        tops_ret = ctx->topsruntime_lib_ctx->lib_topsPointerGetAttributes(
+            &att, (void*)(ctx->stream_addr));
+        if (tops_ret != topsSuccess) {
+            av_log(avctx, AV_LOG_ERROR, "topsPointerGetAttributes failed!\n");
+            ret = AVERROR(EPERM);
+            goto error;
+        }
+        ctx->mem_addr = (u64_t)att.device_pointer;
+        // pthread_mutex_unlock(&g_buf_mutex);
+    }
 
     memset(&codec_info, 0, sizeof(topscodecDecCreateInfo_t));
     av_log(avctx, AV_LOG_DEBUG, "zero copy %d\n", ctx->zero_copy);
@@ -914,9 +941,9 @@ static int topscodec_receive_frame(AVCodecContext* avctx, AVFrame* frame) {
             p.data = avctx->extradata;
             p.size = avctx->extradata_size;
             p.pts  = 0;
-            pthread_mutex_lock(&g_dec_mutex);
+            // pthread_mutex_lock(&g_dec_mutex);
             ff_topscodec_avpkt_to_efbuf(&p, ctx->ef_buf_pkt);
-            pthread_mutex_unlock(&g_dec_mutex);
+            // pthread_mutex_unlock(&g_dec_mutex);
             print_stream(avctx, &ctx->ef_buf_pkt->ef_pkt);
             do {
                 ret = ctx->topscodec_lib_ctx->lib_topscodecDecodeStream(
@@ -937,7 +964,7 @@ static int topscodec_receive_frame(AVCodecContext* avctx, AVFrame* frame) {
                 }
             } while (ret == TOPSCODEC_ERROR_TIMEOUT);
         }
-       ctx->first_packet = 0; 
+        ctx->first_packet = 0;
     }
     ff_topscodec_avpkt_to_efbuf(&ctx->av_pkt, ctx->ef_buf_pkt);
     ctx->total_packet_count++;
@@ -1282,8 +1309,8 @@ static const AVCodecHWConfigInternal* topscodec_hw_configs[] = {
                 AV_PIX_FMT_YUV444P10LE, AV_PIX_FMT_P010LE_EF,             \
                 AV_PIX_FMT_P010LE, AV_PIX_FMT_GRAY8, AV_PIX_FMT_GRAY10,   \
                 AV_PIX_FMT_NONE},                                         \
-        .hw_configs   = topscodec_hw_configs,                             \
-        .p.wrapper_name = "topscodec",                                      \
+        .hw_configs     = topscodec_hw_configs,                           \
+        .p.wrapper_name = "topscodec",                                    \
     }
 #endif
 
