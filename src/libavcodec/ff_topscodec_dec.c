@@ -319,15 +319,16 @@ static av_cold int topscodec_decode_init(AVCodecContext* avctx) {
             return AVERROR_BUG;
     }
 
-    // pthread_mutex_lock(&g_dec_mutex);
+    pthread_mutex_lock(&g_dec_mutex);
     ret = topscodec_load_functions(&ctx->topscodec_lib_ctx);
     if (ret != 0) {
         av_log(avctx, AV_LOG_ERROR,
                "Error, topscodec_lib_load failed, ret(%d)\n", ret);
         ret = AVERROR(EINVAL);
+        pthread_mutex_unlock(&g_dec_mutex);
         goto error;
     }
-    // pthread_mutex_unlock(&g_dec_mutex);
+    pthread_mutex_unlock(&g_dec_mutex);
 
     topscodec_get_version(avctx);
     memset(&ctx->caps, 0, sizeof(ctx->caps));
@@ -560,13 +561,14 @@ static av_cold int topscodec_decode_init(AVCodecContext* avctx) {
 
     ctx->stream_buf_size = FFALIGN(bitstream_size, 4096);
     if (!ctx->stream_addr) {
-        // pthread_mutex_lock(&g_buf_mutex);
+        // pthread_mutex_lock(&g_dec_mutex);
         tops_ret = ctx->topsruntime_lib_ctx->lib_topsExtMallocWithFlags(
             &tmp, ctx->stream_buf_size, topsMallocHostAccessable);
         if (topsSuccess != tops_ret) {
             av_log(avctx, AV_LOG_ERROR, "Error, topsMalloc failed, ret(%d)\n",
                    tops_ret);
             ret = AVERROR(EPERM);
+            // pthread_mutex_unlock(&g_dec_mutex);
             goto error;
         }
         ctx->stream_addr = (uint64_t)tmp;
@@ -577,10 +579,11 @@ static av_cold int topscodec_decode_init(AVCodecContext* avctx) {
         if (tops_ret != topsSuccess) {
             av_log(avctx, AV_LOG_ERROR, "topsPointerGetAttributes failed!\n");
             ret = AVERROR(EPERM);
+            // pthread_mutex_unlock(&g_dec_mutex);
             goto error;
         }
         ctx->mem_addr = (u64_t)att.device_pointer;
-        // pthread_mutex_unlock(&g_buf_mutex);
+        // pthread_mutex_unlock(&g_dec_mutex);
     }
 
     memset(&codec_info, 0, sizeof(topscodecDecCreateInfo_t));
@@ -794,10 +797,10 @@ static av_cold int topscodec_decode_close(AVCodecContext* avctx) {
     }
 
     if (ctx->topscodec_lib_ctx) {
-        // pthread_mutex_lock(&g_dec_mutex);
+        pthread_mutex_lock(&g_dec_mutex);
         topscodec_free_functions(&ctx->topscodec_lib_ctx);
         av_log(avctx, AV_LOG_DEBUG, "topscodec_lib_ctx free\n");
-        // pthread_mutex_unlock(&g_dec_mutex);
+        pthread_mutex_unlock(&g_dec_mutex);
     }
 
     if (ctx->hwdevice) {
