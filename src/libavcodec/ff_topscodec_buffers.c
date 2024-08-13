@@ -32,7 +32,7 @@
 #include "libavutil/pixdesc.h"
 #include "libavutil/pixfmt.h"
 
-// static pthread_mutex_t g_buf_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t g_buf_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 static enum AVColorPrimaries topscodec_get_color_primaries(
     const EFBuffer* buf) {
