@@ -364,7 +364,7 @@ static av_cold int topscodec_decode_init(AVCodecContext* avctx) {
                 goto error;
             }
         } else {
-            //load topsruntime lib
+            // load topsruntime lib
             ret = av_hwdevice_ctx_create(
                 &ctx->hwdevice, AV_HWDEVICE_TYPE_TOPSCODEC, card_idx, NULL, 0);
             if (ret < 0) {
@@ -386,22 +386,7 @@ static av_cold int topscodec_decode_init(AVCodecContext* avctx) {
         }
         hwframe_ctx           = (AVHWFramesContext*)ctx->hwframe->data;
         need_init_hwframe_ctx = 1;
-
-        // if (!hwframe_ctx->pool) {
-        //     hwframe_ctx->format    = AV_PIX_FMT_EFCCODEC;
-        //     hwframe_ctx->sw_format = avctx->sw_pix_fmt;
-        //     hwframe_ctx->width     = avctx->coded_width;  // outwidth?
-        //     downscale hwframe_ctx->height = avctx->coded_height;  //
-        //     outheight? downscale hwframe_ctx->initial_pool_size = 3; /*TODO*/
-        //     hwframe_ctx->pool              = NULL;      /*TODO*/
-        //     if ((ret = av_hwframe_ctx_init(ctx->hwframe)) < 0) {
-        //         av_log(avctx, AV_LOG_ERROR,
-        //                "Error, av_hwframe_ctx_init failed, ret(%d)\n", ret);
-        //         ret = AVERROR(EINVAL);
-        //         goto error;
-        //     }
-        // }
-        avctx->hw_frames_ctx = av_buffer_ref(ctx->hwframe);
+        avctx->hw_frames_ctx  = av_buffer_ref(ctx->hwframe);
     }
 
     pthread_mutex_lock(&g_dec_mutex);
@@ -548,94 +533,6 @@ static av_cold int topscodec_decode_init(AVCodecContext* avctx) {
     device_hwctx             = device_ctx->hwctx;
     ctx->topsruntime_lib_ctx = device_hwctx->topsruntime_lib_ctx;
 
-    // pix_fmts[0] = AV_PIX_FMT_EFCCODEC;
-    // pix_fmts[1] = AV_PIX_FMT_YUV420P;
-    // pix_fmts[2] = AV_PIX_FMT_NONE;
-    // ret         = ff_get_format(avctx, pix_fmts);
-    // if (ret < 0) {
-    //     av_log(avctx, AV_LOG_ERROR, "ff_get_format failed: %d\n", ret);
-    //     return ret;
-    // }
-    // avctx->pix_fmt = ret;
-    // av_log(avctx, AV_LOG_DEBUG, "TOPSCODEC AVCTX pix fmt:%s\n",
-    //        av_get_pix_fmt_name(ret));
-    // ctx->output_pixfmt = av_get_pix_fmt(ctx->str_output_pixfmt);
-    // /* sw_pix_fmt is Nominal unaccelerated pixel format.*/
-    // avctx->sw_pix_fmt = ctx->output_pixfmt;
-    // av_log(avctx, AV_LOG_DEBUG, "TOPSCODEC AVCTX sw pix fmt:%s\n",
-    //        av_get_pix_fmt_name(avctx->sw_pix_fmt));
-
-    // sprintf(card_idx, "%d", ctx->card_id);
-    // if (avctx->hw_frames_ctx) {  // if hw_frames_ctx setted by user
-    //     av_buffer_unref(&ctx->hwframe);
-    //     ctx->hwframe = av_buffer_ref(avctx->hw_frames_ctx);
-    //     if (!ctx->hwframe) {
-    //         ret = AVERROR(EINVAL);
-    //         goto error;
-    //     }
-
-    //     hwframe_ctx = (AVHWFramesContext*)ctx->hwframe->data;
-    //     hwframe_ctx->device_ctx =
-    //         (AVHWDeviceContext*)hwframe_ctx->device_ref->data;
-    //     ctx->hwdevice = av_buffer_ref(hwframe_ctx->device_ref);
-    //     if (!ctx->hwdevice) {
-    //         av_log(avctx, AV_LOG_ERROR,
-    //                "A hardware frames or device context is"
-    //                "required for hardware accelerated decoding.\n");
-    //         ret = AVERROR(EINVAL);
-    //         goto error;
-    //     }
-    // } else {
-    //     if (avctx->hw_device_ctx) {
-    //         ctx->hwdevice = av_buffer_ref(avctx->hw_device_ctx);
-    //         if (!ctx->hwdevice) {
-    //             ret = AVERROR(EINVAL);
-    //             goto error;
-    //         }
-    //     } else {
-    //         ret = av_hwdevice_ctx_create(
-    //             &ctx->hwdevice, AV_HWDEVICE_TYPE_TOPSCODEC, card_idx, NULL,
-    //             0);
-    //         if (ret < 0) {
-    //             av_log(avctx, AV_LOG_ERROR,
-    //                    "Hardware device context create "
-    //                    "failed,ret(%d).\n",
-    //                    ret);
-    //             goto error;
-    //         }
-    //     }
-
-    //     ctx->hwframe = av_hwframe_ctx_alloc(ctx->hwdevice);
-    //     if (!ctx->hwframe) {
-    //         av_log(avctx, AV_LOG_ERROR,
-    //                "Error, av_hwframe_ctx_alloc failed.\n");
-
-    //         ret = AVERROR(EINVAL);
-    //         goto error;
-    //     }
-    //     hwframe_ctx = (AVHWFramesContext*)ctx->hwframe->data;
-    //     if (!hwframe_ctx->pool) {
-    //         hwframe_ctx->format    = AV_PIX_FMT_EFCCODEC;
-    //         hwframe_ctx->sw_format = avctx->sw_pix_fmt;
-    //         hwframe_ctx->width     = avctx->coded_width;  // outwidth?
-    //         downscale hwframe_ctx->height = avctx->coded_height;  //
-    //         outheight? downscale hwframe_ctx->initial_pool_size = 3; /*TODO*/
-    //         hwframe_ctx->pool              = NULL;      /*TODO*/
-    //         if ((ret = av_hwframe_ctx_init(ctx->hwframe)) < 0) {
-    //             av_log(avctx, AV_LOG_ERROR,
-    //                    "Error, av_hwframe_ctx_init failed, ret(%d)\n", ret);
-    //             ret = AVERROR(EINVAL);
-    //             goto error;
-    //         }
-    //     }
-    //     avctx->hw_frames_ctx = av_buffer_ref(ctx->hwframe);
-    // }
-
-    // ctx->hwframes_ctx        = hwframe_ctx;
-    // device_ctx               = hwframe_ctx->device_ctx;
-    // device_hwctx             = device_ctx->hwctx;
-    // ctx->topsruntime_lib_ctx = device_hwctx->topsruntime_lib_ctx;
-
     ctx->total_frame_count  = 0;
     ctx->total_packet_count = 0;
     ctx->recv_first_frame   = 0;
@@ -669,14 +566,12 @@ static av_cold int topscodec_decode_init(AVCodecContext* avctx) {
 
     ctx->stream_buf_size = FFALIGN(bitstream_size, 4096);
     if (!ctx->stream_addr) {
-        // pthread_mutex_lock(&g_dec_mutex);
         tops_ret = ctx->topsruntime_lib_ctx->lib_topsExtMallocWithFlags(
             &tmp, ctx->stream_buf_size, topsMallocHostAccessable);
         if (topsSuccess != tops_ret) {
             av_log(avctx, AV_LOG_ERROR, "Error, topsMalloc failed, ret(%d)\n",
                    tops_ret);
             ret = AVERROR(EPERM);
-            // pthread_mutex_unlock(&g_dec_mutex);
             goto error;
         }
         ctx->stream_addr = (uint64_t)tmp;
@@ -687,11 +582,9 @@ static av_cold int topscodec_decode_init(AVCodecContext* avctx) {
         if (tops_ret != topsSuccess) {
             av_log(avctx, AV_LOG_ERROR, "topsPointerGetAttributes failed!\n");
             ret = AVERROR(EPERM);
-            // pthread_mutex_unlock(&g_dec_mutex);
             goto error;
         }
         ctx->mem_addr = (u64_t)att.device_pointer;
-        // pthread_mutex_unlock(&g_dec_mutex);
     }
 
     memset(&codec_info, 0, sizeof(topscodecDecCreateInfo_t));
@@ -1052,9 +945,7 @@ static int topscodec_receive_frame(AVCodecContext* avctx, AVFrame* frame) {
             p.data = avctx->extradata;
             p.size = avctx->extradata_size;
             p.pts  = 0;
-            // pthread_mutex_lock(&g_dec_mutex);
             ff_topscodec_avpkt_to_efbuf(&p, ctx->ef_buf_pkt);
-            // pthread_mutex_unlock(&g_dec_mutex);
             print_stream(avctx, &ctx->ef_buf_pkt->ef_pkt);
             do {
                 ret = ctx->topscodec_lib_ctx->lib_topscodecDecodeStream(
