@@ -364,6 +364,7 @@ static av_cold int topscodec_decode_init(AVCodecContext* avctx) {
                 goto error;
             }
         } else {
+            //load topsruntime lib
             ret = av_hwdevice_ctx_create(
                 &ctx->hwdevice, AV_HWDEVICE_TYPE_TOPSCODEC, card_idx, NULL, 0);
             if (ret < 0) {
@@ -668,14 +669,14 @@ static av_cold int topscodec_decode_init(AVCodecContext* avctx) {
 
     ctx->stream_buf_size = FFALIGN(bitstream_size, 4096);
     if (!ctx->stream_addr) {
-        pthread_mutex_lock(&g_dec_mutex);
+        // pthread_mutex_lock(&g_dec_mutex);
         tops_ret = ctx->topsruntime_lib_ctx->lib_topsExtMallocWithFlags(
             &tmp, ctx->stream_buf_size, topsMallocHostAccessable);
         if (topsSuccess != tops_ret) {
             av_log(avctx, AV_LOG_ERROR, "Error, topsMalloc failed, ret(%d)\n",
                    tops_ret);
             ret = AVERROR(EPERM);
-            pthread_mutex_unlock(&g_dec_mutex);
+            // pthread_mutex_unlock(&g_dec_mutex);
             goto error;
         }
         ctx->stream_addr = (uint64_t)tmp;
@@ -686,11 +687,11 @@ static av_cold int topscodec_decode_init(AVCodecContext* avctx) {
         if (tops_ret != topsSuccess) {
             av_log(avctx, AV_LOG_ERROR, "topsPointerGetAttributes failed!\n");
             ret = AVERROR(EPERM);
-            pthread_mutex_unlock(&g_dec_mutex);
+            // pthread_mutex_unlock(&g_dec_mutex);
             goto error;
         }
         ctx->mem_addr = (u64_t)att.device_pointer;
-        pthread_mutex_unlock(&g_dec_mutex);
+        // pthread_mutex_unlock(&g_dec_mutex);
     }
 
     memset(&codec_info, 0, sizeof(topscodecDecCreateInfo_t));
