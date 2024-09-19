@@ -550,11 +550,12 @@ static void* job_thread(void* arg) {
     if (g_input_h > 0 && g_input_w > 0) {
         memset(tmp, 0, sizeof(tmp));
         snprintf(tmp, sizeof(tmp), "%d", g_input_w);
-        av_dict_set(&dec_opts, "w", tmp, 0);
+        av_dict_set(&dec_opts, "in_w", tmp, 0);
 
         memset(tmp, 0, sizeof(tmp));
         snprintf(tmp, sizeof(tmp), "%d", g_input_h);
-        av_dict_set(&dec_opts, "h", tmp, 0);
+        av_dict_set(&dec_opts, "in_h", tmp, 0);
+        av_log(avctx, AV_LOG_DEBUG, "set in w/h:%d/%d\n", g_input_w, g_input_h);
     }
 
     if ((ret = avcodec_open2(avctx, decoder, &dec_opts)) < 0) {
@@ -845,6 +846,10 @@ int main(int argc, char* argv[]) {
             "[-d start_dev_id] "
             "[-m end_dev_id] "
             "[-s sessions] "
+            "[-b input_buf_num] "
+            "[-p out_buf_num] "
+            "[-w width] "
+            "[-h height] "
             "[-y write_out_file 0/1] "
             "-i <input file> -o <output file>\n",
             argv[0]);
