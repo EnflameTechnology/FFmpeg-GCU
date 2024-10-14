@@ -3,7 +3,9 @@ set -eu -o pipefail
 set +eu +o pipefail
 
 FFMPEG_TAG=${FFMPEG_TAG:-"n5.0"}
-FFMPEG_REPO=${FFMPEG_REPO:-"https://github.com/FFmpeg/FFmpeg.git"}
+# FFMPEG_REPO=${FFMPEG_REPO:-"https://github.com/FFmpeg/FFmpeg.git"}
+FFMPEG_REPO=${FFMPEG_REPO:-"http://git.enflame.cn/sw/va/FFmpeg.git"} #for debug
+
 build_path=$(dirname $(readlink -f "$0"))/build
 cache_tool=""
 no_cache=false
@@ -213,43 +215,30 @@ echo "configure FFmpeg"
     --disable-optimizations \
     --enable-pic \
     --enable-swscale \
-    --enable-nvdec \
-    --enable-cuvid \
     --enable-topscodec \
     --enable-decoder=vc1 \
     --enable-decoder=vc1_topscodec \
-    --enable-decoder=vc1_cuvid \
     --enable-decoder=av1 \
     --enable-decoder=av1_topscodec \
-    --enable-decoder=av1_cuvid \
     --enable-decoder=h264 \
     --enable-decoder=h264_topscodec \
-    --enable-decoder=h264_cuvid \
     --enable-decoder=hevc \
     --enable-decoder=hevc_topscodec \
-    --enable-decoder=hevc_cuvid \
     --enable-decoder=vp8 \
     --enable-decoder=vp8_topscodec \
-    --enable-decoder=vp8_cuvid \
     --enable-decoder=vp9 \
     --enable-decoder=vp9_topscodec \
-    --enable-decoder=vp9_cuvid \
     --enable-decoder=mpeg4 \
     --enable-decoder=mpeg4_topscodec \
-    --enable-decoder=mpeg4_cuvid \
     --enable-decoder=mpeg2video \
     --enable-decoder=mpeg2_topscodec \
-    --enable-decoder=mpeg2_cuvid \
     --enable-decoder=mjpeg \
     --enable-decoder=mjpeg_topscodec \
-    --enable-decoder=mjpeg_cuvid \
     --enable-decoder=h263_topscodec \
     --enable-decoder=avs_topscodec \
     --enable-decoder=avs2_topscodec \
-    --enable-decoder=mpeg1_cuvid \
     --enable-static \
-    --enable-shared \
-    --enable-cross-compile
+    --enable-shared 
 
 if [ $? -ne 0 ]; then
     echo "configure failed"
