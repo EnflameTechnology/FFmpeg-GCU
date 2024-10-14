@@ -3,8 +3,8 @@ set -eu -o pipefail
 set +eu +o pipefail
 
 FFMPEG_TAG=${FFMPEG_TAG:-"n5.0"}
-# FFMPEG_REPO=${FFMPEG_REPO:-"https://github.com/FFmpeg/FFmpeg.git"}
-FFMPEG_REPO=${FFMPEG_REPO:-"http://git.enflame.cn/sw/va/FFmpeg.git"} #for debug
+FFMPEG_REPO=${FFMPEG_REPO:-"https://github.com/FFmpeg/FFmpeg.git"}
+# FFMPEG_REPO=${FFMPEG_REPO:-"http://git.enflame.cn/sw/va/FFmpeg.git"} #for debug
 
 build_path=$(dirname $(readlink -f "$0"))/build
 cache_tool=""
