@@ -21,6 +21,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <unistd.h>
+
 #include "avcodec.h"
 #include "ff_topscodec_buffers.h"
 #include "tops/dynlink_tops_loader.h"
@@ -88,11 +89,12 @@ typedef struct {
     AVHWFramesContext* hwframes_ctx;
     AVCodecContext*    avctx;
 
-    AVPacket av_pkt;
-    AVFrame  mid_frame;
-    AVFrame* last_received_frame[MAX_FRAME_NUM];
-    int      idx_put;  // for last_received_frame
-    int      idx_get;  // for last_received_frame
+    AVPacket* av_pkt;
+    AVPacket* av_pkt_1;
+    AVFrame   mid_frame;
+    AVFrame*  last_received_frame[MAX_FRAME_NUM];
+    int       idx_put;  // for last_received_frame
+    int       idx_get;  // for last_received_frame
 
     EFBuffer* ef_buf_frame[MAX_FRAME_NUM];
     EFBuffer* ef_buf_pkt;
@@ -110,6 +112,10 @@ typedef struct {
     int                    recv_first_frame;
     int                    recv_outport_eos;
     int                    first_packet;
+#if AV_VERSION_INT(LIBAVCODEC_VERSION_MAJOR, LIBAVCODEC_VERSION_MINOR, LIBAVCODEC_VERSION_MICRO) <= \
+    AV_VERSION_INT(57, 64, 100)  // 3.2
+    AVBSFContext* bsf;
+#endif
 } EFCodecDecContext_t;
 
 #endif  // AVCODEC_EF_TOPSCODEC_DEC_H

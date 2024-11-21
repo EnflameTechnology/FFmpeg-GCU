@@ -1,9 +1,11 @@
 # FFmpeg-GCU
 
 本插件适用于enflame GCU300 以上版本。
-适用ffmpeg版本4.4，5.0，5.1.
+适用ffmpeg版本3.2, 4.4，5.0，5.1.
 
 为了适配ffmpeg多版本，除了topscodec新增加的文件外，其余在现有ffmpeg 框架代码下修改的文件全部采用shell脚本增删相关内容，所以编译需要的ffmpeg版本必须是官方ffmpeg文件。
+
+其中n3.2不包含avs，av1解码器。
 
 ## 如何编译？
 
@@ -15,13 +17,13 @@ make install
 
 然后再plugin文件夹中执行，
 ```
-./build_ffmpeg.sh -b
+./build_ffmpeg.sh n3.2
 ```
 详细的编译选项可以参考
 ```
 ./build_ffmpeg.sh -h
 ```
-完成编译后既可以使用。
+完成编译后会生成deb包。
 
 
 

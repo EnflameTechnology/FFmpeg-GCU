@@ -40,8 +40,7 @@
 #include <pthread.h>
 #include <stdio.h>
 
-typedef void (*ffmpeg_log_callback)(void* ptr, int level, const char* fmt,
-                                    va_list vl);
+typedef void (*ffmpeg_log_callback)(void* ptr, int level, const char* fmt, va_list vl);
 
 #define LOG_BUF_PREFIX_SIZE 512
 #define LOG_BUF_SIZE 1024
@@ -54,21 +53,27 @@ static int                count                             = 0;
 static enum AVPixelFormat hw_pix_fmt;
 static pthread_mutex_t    cb_av_log_lock;
 
-static int hw_decoder_init(AVCodecContext* ctx, const enum AVHWDeviceType type,
-                           const char* dev_id) {
-    int ret = 0;
+// static int hw_decoder_init(AVCodecContext* ctx, const enum AVHWDeviceType type,
+//                            const char* dev_id) {
+//     int ret = 0;
 
-    if ((ret = av_hwdevice_ctx_create(&hw_device_ctx, type, dev_id, NULL, 0)) <
-        0) {
-        av_log(ctx, AV_LOG_ERROR, "Failed to create specified HW device.\n");
-        return ret;
-    }
-    ctx->hw_device_ctx = av_buffer_ref(hw_device_ctx);
-    return ret;
+//     if ((ret = av_hwdevice_ctx_create(&hw_device_ctx, type, dev_id, NULL, 0)) <
+//         0) {
+//         av_log(ctx, AV_LOG_ERROR, "Failed to create specified HW device.\n");
+//         return ret;
+//     }
+//     ctx->hw_device_ctx = av_buffer_ref(hw_device_ctx);
+//     return ret;
+// }
+
+// (58, 134, 100) n4.4
+#if AV_VERSION_INT(LIBAVCODEC_VERSION_MAJOR, LIBAVCODEC_VERSION_MINOR, LIBAVCODEC_VERSION_MICRO) < \
+    AV_VERSION_INT(58, 134, 100)
+static enum AVPixelFormat get_hw_format(AVCodecContext* ctx, const enum AVPixelFormat* pix_fmts) {
+    return AV_PIX_FMT_TOPSCODEC;
 }
-
-static enum AVPixelFormat get_hw_format(AVCodecContext*           ctx,
-                                        const enum AVPixelFormat* pix_fmts) {
+#else
+static enum AVPixelFormat get_hw_format(AVCodecContext* ctx, const enum AVPixelFormat* pix_fmts) {
     const enum AVPixelFormat* p;
 
     for (p = pix_fmts; *p != -1; p++) {
@@ -78,7 +83,7 @@ static enum AVPixelFormat get_hw_format(AVCodecContext*           ctx,
     av_log(ctx, AV_LOG_ERROR, "Failed to get HW surface format.\n");
     return AV_PIX_FMT_NONE;
 }
-
+#endif
 static int decode_write(AVCodecContext* avctx, AVPacket* packet, int send_eos) {
     AVFrame* frame    = NULL;
     AVFrame* sw_frame = NULL;
@@ -118,18 +123,16 @@ static int decode_write(AVCodecContext* avctx, AVPacket* packet, int send_eos) {
             goto fail;
         }
 
-        size = av_image_get_buffer_size(frame->format, frame->width,
-                                        frame->height, 1);
+        size = av_image_get_buffer_size(frame->format, frame->width, frame->height, 1);
 
         /*Be sure to obtain w/h/format from the output frame.*/
         sw_frame->width  = frame->width;
         sw_frame->height = frame->height;
         sw_frame->format = frame->format;
 
-        av_log(avctx, AV_LOG_DEBUG, "frame format:%s, w:%d, h:%d\n",
-               av_get_pix_fmt_name(frame->format), frame->width, frame->height);
-        ret = av_image_fill_linesizes(linesizes, sw_frame->format,
-                                      sw_frame->width);
+        av_log(avctx, AV_LOG_DEBUG, "frame format:%s, w:%d, h:%d\n", av_get_pix_fmt_name(frame->format), frame->width,
+               frame->height);
+        ret = av_image_fill_linesizes(linesizes, sw_frame->format, sw_frame->width);
         if (ret < 0) {
             av_log(avctx, AV_LOG_ERROR, "av_image_fill_plane_sizes failed.\n");
             goto fail;
@@ -137,11 +140,9 @@ static int decode_write(AVCodecContext* avctx, AVPacket* packet, int send_eos) {
 
         for (int i = 0; i < 4; i++) {
             linesizes1[i] = linesizes[i];
-            av_log(avctx, AV_LOG_DEBUG, "ptrlinesizes[%d]:%ld\n", i,
-                   linesizes1[i]);
+            av_log(avctx, AV_LOG_DEBUG, "ptrlinesizes[%d]:%ld\n", i, linesizes1[i]);
         }
-        ret = av_image_fill_plane_sizes(planesizes, sw_frame->format,
-                                        sw_frame->height, linesizes1);
+        ret = av_image_fill_plane_sizes(planesizes, sw_frame->format, sw_frame->height, linesizes1);
         if (ret < 0) {
             av_log(avctx, AV_LOG_ERROR, "av_image_fill_plane_sizes failed.\n");
             goto fail;
@@ -170,8 +171,7 @@ static int decode_write(AVCodecContext* avctx, AVPacket* packet, int send_eos) {
         */
         ret = av_hwframe_transfer_data(sw_frame, frame, 0);
         if (ret < 0) {
-            av_log(avctx, AV_LOG_ERROR,
-                   "Error transferring the data to Host memory\n");
+            av_log(avctx, AV_LOG_ERROR, "Error transferring the data to Host memory, ret=%d\n", ret);
             goto fail;
         }
 
@@ -186,10 +186,9 @@ static int decode_write(AVCodecContext* avctx, AVPacket* packet, int send_eos) {
         /*Copies the non-contiguous content of the three channels data */
         /*onto the contiguous buf*/
         /*data is on the host mem*/
-        ret = av_image_copy_to_buffer(
-            buffer, size, (const uint8_t* const*)sw_frame->data,
-            (const int*)sw_frame->linesize, sw_frame->format, sw_frame->width,
-            sw_frame->height, 1);
+        ret =
+            av_image_copy_to_buffer(buffer, size, (const uint8_t* const*)sw_frame->data, (const int*)sw_frame->linesize,
+                                    sw_frame->format, sw_frame->width, sw_frame->height, 1);
         if (ret < 0) {
             av_log(avctx, AV_LOG_ERROR, "Can not copy image to buffer\n");
             goto fail;
@@ -211,8 +210,7 @@ static int decode_write(AVCodecContext* avctx, AVPacket* packet, int send_eos) {
     return 0;
 }
 
-static void log_callback_null(void* ptr, int level, const char* fmt,
-                              va_list vl) {
+static void log_callback_null(void* ptr, int level, const char* fmt, va_list vl) {
     pthread_mutex_lock(&cb_av_log_lock);
     snprintf(logBufPrefix, LOG_BUF_PREFIX_SIZE, "%s", fmt);
     vsnprintf(logBuffer, LOG_BUF_SIZE, logBufPrefix, vl);
@@ -242,6 +240,12 @@ int main(int argc, char* argv[]) {
     AVPacket            packet;
     enum AVHWDeviceType type;
     ffmpeg_log_callback fptrLog;
+
+#if AV_VERSION_INT(LIBAVCODEC_VERSION_MAJOR, LIBAVCODEC_VERSION_MINOR, LIBAVCODEC_VERSION_MICRO) <= \
+    AV_VERSION_INT(57, 64, 100)
+    /* register all formats and codecs */
+    av_register_all();
+#endif
 
     if (argc < 5) {
         fprintf(stderr,
@@ -293,18 +297,19 @@ int main(int argc, char* argv[]) {
     fptrLog = log_callback_null;
     av_log_set_level(AV_LOG_DEBUG);
     av_log_set_callback(fptrLog);
-
+// (58, 134, 100) n4.4
+#if AV_VERSION_INT(LIBAVCODEC_VERSION_MAJOR, LIBAVCODEC_VERSION_MINOR, LIBAVCODEC_VERSION_MICRO) >= \
+    AV_VERSION_INT(58, 134, 100)
     type = av_hwdevice_find_type_by_name(dev_type);
     if (type == AV_HWDEVICE_TYPE_NONE) {
         fprintf(stderr, "Device type %s is not supported.\n", dev_type);
         fprintf(stderr, "Available device types:");
-        while ((type = av_hwdevice_iterate_types(type)) !=
-               AV_HWDEVICE_TYPE_NONE)
+        while ((type = av_hwdevice_iterate_types(type)) != AV_HWDEVICE_TYPE_NONE)
             fprintf(stderr, " %s", av_hwdevice_get_type_name(type));
         fprintf(stderr, "\n");
         return -1;
     }
-
+#endif
     tmp_name = &in_file[strlen(in_file) - 4];
     if (!strcmp(tmp_name, "cavs") || !strcmp(tmp_name, ".avs")) {
         fmt = av_find_input_format("cavsvideo");
@@ -312,7 +317,7 @@ int main(int argc, char* argv[]) {
         fmt = NULL;
     }
 
-    if (avformat_open_input(&input_ctx, in_file, fmt, NULL) != 0) {
+    if (avformat_open_input(&input_ctx, in_file, fmt, NULL) < 0) {
         fprintf(stderr, "Cannot open input file '%s'\n", in_file);
         return -1;
     }
@@ -366,12 +371,16 @@ int main(int argc, char* argv[]) {
         case AV_CODEC_ID_CAVS:
             decoder = avcodec_find_decoder_by_name("avs_topscodec");
             break;
+// (58, 134, 100) n4.4
+#if AV_VERSION_INT(LIBAVCODEC_VERSION_MAJOR, LIBAVCODEC_VERSION_MINOR, LIBAVCODEC_VERSION_MICRO) >= \
+    AV_VERSION_INT(58, 134, 100)
         case AV_CODEC_ID_AVS2:
             decoder = avcodec_find_decoder_by_name("avs2_topscodec");
             break;
         case AV_CODEC_ID_AV1:
             decoder = avcodec_find_decoder_by_name("av1_topscodec");
             break;
+#endif
         default:
             decoder = avcodec_find_decoder(video->codecpar->codec_id);
             break;
@@ -381,20 +390,23 @@ int main(int argc, char* argv[]) {
         fprintf(stderr, "Unsupported codec! \n");
         return -1;
     }
-
+// (58, 134, 100) n4.4
+#if AV_VERSION_INT(LIBAVCODEC_VERSION_MAJOR, LIBAVCODEC_VERSION_MINOR, LIBAVCODEC_VERSION_MICRO) >= \
+    AV_VERSION_INT(58, 134, 100)
     for (i = 0;; i++) {
         const AVCodecHWConfig* config = avcodec_get_hw_config(decoder, i);
         if (!config) {
-            fprintf(stderr, "Decoder %s does not support device type %s.\n",
-                    decoder->name, av_hwdevice_get_type_name(type));
+            fprintf(stderr, "Decoder %s does not support device type %s.\n", decoder->name,
+                    av_hwdevice_get_type_name(type));
             return -1;
         }
-        if (config->methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX &&
-            config->device_type == type) {
+
+        if (config->methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX && config->device_type == type) {
             hw_pix_fmt = config->pix_fmt;
             break;
         }
     }
+#endif
 
     if (!(avctx = avcodec_alloc_context3(decoder))) return AVERROR(ENOMEM);
 
@@ -402,7 +414,7 @@ int main(int argc, char* argv[]) {
 
     avctx->get_format = get_hw_format;
 
-    if (hw_decoder_init(avctx, type, dev_id) < 0) return -1;
+    // if (hw_decoder_init(avctx, type, dev_id) < 0) return -1;
 
     if (card_id) av_dict_set(&dec_opts, "card_id", card_id, 0);
     if (dev_id) av_dict_set(&dec_opts, "device_id", dev_id, 0);

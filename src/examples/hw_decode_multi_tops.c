@@ -47,8 +47,7 @@
 #include <string.h>
 #include <unistd.h>
 
-typedef void (*ffmpeg_log_callback)(void* ptr, int level, const char* fmt,
-                                    va_list vl);
+typedef void (*ffmpeg_log_callback)(void* ptr, int level, const char* fmt, va_list vl);
 
 #define LOG_BUF_PREFIX_SIZE (512)
 #define LOG_BUF_SIZE (1024)
@@ -238,12 +237,16 @@ static AVCodec* create_decoder(enum AVCodecID codec_id) {
         case AV_CODEC_ID_CAVS:
             decoder = avcodec_find_decoder_by_name("avs_topscodec");
             break;
+            // (58, 134, 100) n4.4
+#if AV_VERSION_INT(LIBAVCODEC_VERSION_MAJOR, LIBAVCODEC_VERSION_MINOR, LIBAVCODEC_VERSION_MICRO) >= \
+    AV_VERSION_INT(58, 134, 100)
         case AV_CODEC_ID_AVS2:
             decoder = avcodec_find_decoder_by_name("avs2_topscodec");
             break;
         case AV_CODEC_ID_AV1:
             decoder = avcodec_find_decoder_by_name("av1_topscodec");
             break;
+#endif
         default:
             decoder = avcodec_find_decoder(codec_id);
             break;
@@ -252,34 +255,30 @@ static AVCodec* create_decoder(enum AVCodecID codec_id) {
     return decoder;
 }
 
-static int hw_decoder_init(AVBufferRef** hw_device_ctx, AVCodecContext* ctx,
-                           const enum AVHWDeviceType type,
-                           const char*               card_id) {
-    int ret = 0;
+// static int hw_decoder_init(AVBufferRef** hw_device_ctx, AVCodecContext* ctx, const enum AVHWDeviceType type,
+//                            const char* card_id) {
+//     int ret = 0;
 
-    if ((ret = av_hwdevice_ctx_create(hw_device_ctx, type, card_id, NULL, 0)) <
-        0) {
-        av_log(ctx, AV_LOG_ERROR, "Failed to create specified HW device.\n");
-        return ret;
-    }
-    ctx->hw_device_ctx = av_buffer_ref(*hw_device_ctx);
-    return ret;
-}
+//     if ((ret = av_hwdevice_ctx_create(hw_device_ctx, type, card_id, NULL, 0)) < 0) {
+//         av_log(ctx, AV_LOG_ERROR, "Failed to create specified HW device.\n");
+//         return ret;
+//     }
+//     ctx->hw_device_ctx = av_buffer_ref(*hw_device_ctx);
+//     return ret;
+// }
 
-static enum AVPixelFormat get_hw_format(AVCodecContext*           ctx,
-                                        const enum AVPixelFormat* pix_fmts) {
+static enum AVPixelFormat get_hw_format(AVCodecContext* ctx, const enum AVPixelFormat* pix_fmts) {
     const enum AVPixelFormat* p;
 
     for (p = pix_fmts; *p != -1; p++) {
-        if (*p == AV_PIX_FMT_EFCCODEC) return *p;
+        if (*p == AV_PIX_FMT_TOPSCODEC) return *p;
     }
 
     av_log(ctx, AV_LOG_ERROR, "Failed to get HW surface format.\n");
     return AV_PIX_FMT_NONE;
 }
 
-static int decode_write(job_args_t* job, FILE* outfile, AVCodecContext* avctx,
-                        AVPacket* packet, int send_eos) {
+static int decode_write(job_args_t* job, FILE* outfile, AVCodecContext* avctx, AVPacket* packet, int send_eos) {
     AVFrame* frame    = NULL;
     AVFrame* sw_frame = NULL;
     uint8_t* buffer   = NULL;
@@ -323,8 +322,7 @@ static int decode_write(job_args_t* job, FILE* outfile, AVCodecContext* avctx,
                 return 0;
             }
         } else if (ret < 0) {
-            av_log(avctx, AV_LOG_ERROR,
-                   "Error while avcodec_receive_frame, ret=%d\n", ret);
+            av_log(avctx, AV_LOG_ERROR, "Error while avcodec_receive_frame, ret=%d\n", ret);
             goto fail;
         }
 
@@ -336,35 +334,28 @@ static int decode_write(job_args_t* job, FILE* outfile, AVCodecContext* avctx,
         }
 
         if (g_dump_out && outfile) {
-            size = av_image_get_buffer_size(frame->format, frame->width,
-                                            frame->height, 1);
+            size = av_image_get_buffer_size(frame->format, frame->width, frame->height, 1);
 
             /*Be sure to obtain w/h/format from the output frame.*/
             sw_frame->width  = frame->width;
             sw_frame->height = frame->height;
             sw_frame->format = frame->format;
 
-            av_log(avctx, AV_LOG_DEBUG, "frame format:%s, w:%d, h:%d\n",
-                   av_get_pix_fmt_name(frame->format), frame->width,
-                   frame->height);
-            ret = av_image_fill_linesizes(linesizes, sw_frame->format,
-                                          sw_frame->width);
+            av_log(avctx, AV_LOG_DEBUG, "frame format:%s, w:%d, h:%d\n", av_get_pix_fmt_name(frame->format),
+                   frame->width, frame->height);
+            ret = av_image_fill_linesizes(linesizes, sw_frame->format, sw_frame->width);
             if (ret < 0) {
-                av_log(avctx, AV_LOG_ERROR,
-                       "av_image_fill_plane_sizes failed.\n");
+                av_log(avctx, AV_LOG_ERROR, "av_image_fill_plane_sizes failed.\n");
                 goto fail;
             }
 
             for (int i = 0; i < 4; i++) {
                 linesizes1[i] = linesizes[i];
-                av_log(avctx, AV_LOG_DEBUG, "ptrlinesizes[%d]:%ld\n", i,
-                       linesizes1[i]);
+                av_log(avctx, AV_LOG_DEBUG, "ptrlinesizes[%d]:%ld\n", i, linesizes1[i]);
             }
-            ret = av_image_fill_plane_sizes(planesizes, sw_frame->format,
-                                            sw_frame->height, linesizes1);
+            ret = av_image_fill_plane_sizes(planesizes, sw_frame->format, sw_frame->height, linesizes1);
             if (ret < 0) {
-                av_log(avctx, AV_LOG_ERROR,
-                       "av_image_fill_plane_sizes failed.\n");
+                av_log(avctx, AV_LOG_ERROR, "av_image_fill_plane_sizes failed.\n");
                 goto fail;
             }
 
@@ -376,8 +367,7 @@ static int decode_write(job_args_t* job, FILE* outfile, AVCodecContext* avctx,
             */
             ret = av_hwframe_transfer_data(sw_frame, frame, 0);
             if (ret < 0) {
-                av_log(avctx, AV_LOG_ERROR,
-                       "Error transferring the data to Host memory\n");
+                av_log(avctx, AV_LOG_ERROR, "Error transferring the data to Host memory\n");
                 goto fail;
             }
 
@@ -393,10 +383,9 @@ static int decode_write(job_args_t* job, FILE* outfile, AVCodecContext* avctx,
              * data */
             /*onto the contiguous buf*/
             /*data is on the host mem*/
-            ret = av_image_copy_to_buffer(
-                buffer, size, (const uint8_t* const*)sw_frame->data,
-                (const int*)sw_frame->linesize, sw_frame->format,
-                sw_frame->width, sw_frame->height, 1);
+            ret = av_image_copy_to_buffer(buffer, size, (const uint8_t* const*)sw_frame->data,
+                                          (const int*)sw_frame->linesize, sw_frame->format, sw_frame->width,
+                                          sw_frame->height, 1);
             if (ret < 0) {
                 av_log(avctx, AV_LOG_ERROR, "Can not copy image to buffer\n");
                 goto fail;
@@ -414,8 +403,7 @@ static int decode_write(job_args_t* job, FILE* outfile, AVCodecContext* avctx,
         av_frame_free(&sw_frame);
         av_freep(&buffer);
         if (ret < 0) {
-            av_log(avctx, AV_LOG_ERROR, "thread:%s fail, ret=%d\n",
-                   job->job_name, ret);
+            av_log(avctx, AV_LOG_ERROR, "thread:%s fail, ret=%d\n", job->job_name, ret);
             return ret;
         }
         av_log(avctx, AV_LOG_DEBUG, "app capture frame:%d\n", job->frames);
@@ -423,8 +411,7 @@ static int decode_write(job_args_t* job, FILE* outfile, AVCodecContext* avctx,
     return 0;
 }
 
-static void log_callback_null(void* ptr, int level, const char* fmt,
-                              va_list vl) {
+static void log_callback_null(void* ptr, int level, const char* fmt, va_list vl) {
     pthread_mutex_lock(&cb_av_log_lock);
     snprintf(logBufPrefix, LOG_BUF_PREFIX_SIZE, "%s", fmt);
     vsnprintf(logBuffer, LOG_BUF_SIZE, logBufPrefix, vl);
@@ -461,18 +448,19 @@ static void* job_thread(void* arg) {
     job_args_t* job = (job_args_t*)arg;
 
     dev_type = DEVICE_NAME;
-
+// (58, 134, 100) n4.4
+#if AV_VERSION_INT(LIBAVCODEC_VERSION_MAJOR, LIBAVCODEC_VERSION_MINOR, LIBAVCODEC_VERSION_MICRO) >= \
+    AV_VERSION_INT(58, 134, 100)
     type = av_hwdevice_find_type_by_name(dev_type);
     if (type == AV_HWDEVICE_TYPE_NONE) {
         fprintf(stderr, "Device type %s is not supported.\n", dev_type);
         fprintf(stderr, "Available device types:");
-        while ((type = av_hwdevice_iterate_types(type)) !=
-               AV_HWDEVICE_TYPE_NONE)
+        while ((type = av_hwdevice_iterate_types(type)) != AV_HWDEVICE_TYPE_NONE)
             fprintf(stderr, " %s", av_hwdevice_get_type_name(type));
         fprintf(stderr, "\n");
         return NULL;
     }
-
+#endif
     tmp_name = &job->in_file[strlen(job->in_file) - 4];
     if (!strcmp(tmp_name, "cavs") || !strcmp(tmp_name, ".avs")) {
         fmt = av_find_input_format("cavsvideo");
@@ -518,7 +506,7 @@ static void* job_thread(void* arg) {
 
     memset(tmp, 0, sizeof(tmp));
     snprintf(tmp, sizeof(tmp), "%d", job->card_id);
-    if (hw_decoder_init(&hw_device_ctx, avctx, type, tmp) < 0) return NULL;
+    // if (hw_decoder_init(&hw_device_ctx, avctx, type, tmp) < 0) return NULL;
 
     memset(tmp, 0, sizeof(tmp));
     snprintf(tmp, sizeof(tmp), "%d", job->card_id);
@@ -574,8 +562,7 @@ static void* job_thread(void* arg) {
     if (g_dump_out == 1) {
         output_file = fopen(job->out_file, "w+");
         if (!output_file) {
-            fprintf(stderr, "Could not open destination file %s\n",
-                    job->out_file);
+            fprintf(stderr, "Could not open destination file %s\n", job->out_file);
             return NULL;
         }
         av_log(avctx, AV_LOG_DEBUG, "open output file %s\n", job->out_file);
@@ -697,8 +684,7 @@ static int cal_card_dev_session() {
 static int parse_opt(int argc, char** argv) {
     int result;
 
-    while ((result = getopt(argc, argv,
-                            "a:e:c:n:d:m:s:i:o:y:l:k:f:b:p:z:w:h:")) != -1) {
+    while ((result = getopt(argc, argv, "a:e:c:n:d:m:s:i:o:y:l:k:f:b:p:z:w:h:")) != -1) {
         switch (result) {
             case 'a':
                 printf("option=h, optopt=%c, optarg=%s\n", optopt, optarg);
@@ -830,6 +816,12 @@ int main(int argc, char* argv[]) {
     float    variance           = 0.0;
     float    standard_deviation = 0.0;
 
+#if AV_VERSION_INT(LIBAVCODEC_VERSION_MAJOR, LIBAVCODEC_VERSION_MINOR, LIBAVCODEC_VERSION_MICRO) <= \
+    AV_VERSION_INT(57, 64, 100)
+    /* register all formats and codecs */
+    av_register_all();
+#endif
+
     parse_opt(argc, argv);
     if (g_in_file == NULL || g_out_file == NULL) {
         printf(
@@ -900,11 +892,14 @@ int main(int argc, char* argv[]) {
     }
 
     g_is_av1 = 0;
+#if AV_VERSION_INT(LIBAVCODEC_VERSION_MAJOR, LIBAVCODEC_VERSION_MINOR, LIBAVCODEC_VERSION_MICRO) >= \
+    AV_VERSION_INT(58, 134, 100)
     // if (end_with(g_in_file, ".av1") || end_with(g_in_file, ".AV1")) {
     if (codec_id == AV_CODEC_ID_AV1) {
         g_is_av1 = 1;
         printf("file[%s] end with AV1\n", g_in_file);
     }
+#endif
     pthread_mutex_init(&cb_av_log_lock, NULL);
 
     fptrLog = log_callback_null;
@@ -939,7 +934,7 @@ int main(int argc, char* argv[]) {
                 }
             }
             for (int k = 0; k < g_sessions; k++) {
-                jobs[i][j][k] = (job_args_t*)malloc(sizeof(job_args_t));
+                jobs[i][j][k]               = (job_args_t*)malloc(sizeof(job_args_t));
                 jobs[i][j][k]->card_id      = i;
                 jobs[i][j][k]->dev_id       = j;
                 jobs[i][j][k]->session_id   = k;
@@ -947,7 +942,7 @@ int main(int argc, char* argv[]) {
                 jobs[i][j][k]->sf           = g_frame_sf;
                 jobs[i][j][k]->in_port_num  = g_in_port_num;
                 jobs[i][j][k]->out_port_num = g_out_port_num;
-                threads[i][j][k] = (pthread_t*)malloc(sizeof(pthread_t));
+                threads[i][j][k]            = (pthread_t*)malloc(sizeof(pthread_t));
                 memset(name, 0, sizeof(name));
                 memset(g_out_file_copy1, 0, sizeof(g_out_file_copy1));
                 memset(g_out_file_copy2, 0, sizeof(g_out_file_copy2));
@@ -955,15 +950,12 @@ int main(int argc, char* argv[]) {
                 path = dirname(g_out_file_copy1);
                 strncpy(g_out_file_copy2, g_out_file, sizeof(g_out_file_copy2));
                 file = basename(g_out_file_copy2);
-                snprintf(name, sizeof(name), "%s/card%d_dev%d_session%d_%s",
-                         path, i, j, k, file);
+                snprintf(name, sizeof(name), "%s/card%d_dev%d_session%d_%s", path, i, j, k, file);
                 // rename outfile's name
-                memset(jobs[i][j][k]->out_file, 0,
-                       sizeof(jobs[i][j][k]->out_file));
+                memset(jobs[i][j][k]->out_file, 0, sizeof(jobs[i][j][k]->out_file));
                 memcpy(jobs[i][j][k]->out_file, name, strlen(name));
                 av_log(NULL, AV_LOG_INFO, "out file name: %s\n", name);
-                ret = pthread_create(threads[i][j][k], NULL, job_thread,
-                                     jobs[i][j][k]);
+                ret = pthread_create(threads[i][j][k], NULL, job_thread, jobs[i][j][k]);
                 if (ret != 0) {
                     fprintf(stderr, "pthread_create failed, ret=%d\n", ret);
                     return -1;
@@ -971,8 +963,7 @@ int main(int argc, char* argv[]) {
                 memset(name, 0, sizeof(name));
                 snprintf(name, sizeof(name), "card%d_dev%d_session%d", i, j, k);
                 // pthread_setname_np(*threads[i][j][k], name);
-                memset(jobs[i][j][k]->job_name, 0,
-                       sizeof(jobs[i][j][k]->job_name));
+                memset(jobs[i][j][k]->job_name, 0, sizeof(jobs[i][j][k]->job_name));
                 memcpy(jobs[i][j][k]->job_name, name, strlen(name));
                 av_log(NULL, AV_LOG_INFO, "create thread %s success.\n", name);
             }
@@ -990,8 +981,7 @@ int main(int argc, char* argv[]) {
             for (int k = 0; k < g_sessions; k++) {
                 pthread_join(*threads[i][j][k], NULL);
                 if (threads[i][j][k]) free(threads[i][j][k]);
-                av_log(NULL, AV_LOG_INFO, "thread join [%s] success\n",
-                       jobs[i][j][k]->job_name);
+                av_log(NULL, AV_LOG_INFO, "thread join [%s] success\n", jobs[i][j][k]->job_name);
             }
         }
     }
@@ -1029,8 +1019,7 @@ int main(int argc, char* argv[]) {
                        "skip_frames:%5lu, "
                        "fps:%5.2f, "
                        "latency:%lu\n",
-                       i, j, k, jobs[i][j][k]->frames,
-                       jobs[i][j][k]->first_read_frames, jobs[i][j][k]->fps,
+                       i, j, k, jobs[i][j][k]->frames, jobs[i][j][k]->first_read_frames, jobs[i][j][k]->fps,
                        jobs[i][j][k]->latency);
             }
             mean_fps         = sum_fps / g_sessions;
@@ -1059,8 +1048,8 @@ int main(int argc, char* argv[]) {
                 "max_fps:%8.2f, "
                 "min_fps:%8.2f, "
                 "mean_fps:%8.2f\n",
-                i, j, g_sessions, g_frame_sf, mean_skip_frames,
-                standard_deviation, mean_latency, max_fps, min_fps, mean_fps);
+                i, j, g_sessions, g_frame_sf, mean_skip_frames, standard_deviation, mean_latency, max_fps, min_fps,
+                mean_fps);
         }
     }
     av_log(NULL, AV_LOG_INFO, "main thread finish\n");

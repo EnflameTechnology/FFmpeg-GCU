@@ -18,12 +18,14 @@
  */
 
 #include "ff_topscodec_buffers.h"
+
 #include <fcntl.h>
 #include <linux/videodev2.h>
 #include <poll.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <unistd.h>
+
 #include "ff_topscodec_dec.h"
 #include "libavcodec/avcodec.h"
 #include "libavcodec/internal.h"
@@ -34,14 +36,9 @@
 
 static pthread_mutex_t g_buf_mutex = PTHREAD_MUTEX_INITIALIZER;
 
-static enum AVColorPrimaries topscodec_get_color_primaries(
-    const EFBuffer* buf) {
-    return AVCOL_PRI_UNSPECIFIED;
-}
+static enum AVColorPrimaries topscodec_get_color_primaries(const EFBuffer* buf) { return AVCOL_PRI_UNSPECIFIED; }
 
-static enum AVColorRange topscodec_get_color_range(const EFBuffer* buf) {
-    return AVCOL_RANGE_UNSPECIFIED;
-}
+static enum AVColorRange topscodec_get_color_range(const EFBuffer* buf) { return AVCOL_RANGE_UNSPECIFIED; }
 
 // FixMe
 static topscodecColorSpace_t topscodec_get_color_space(const AVFrame* frame) {
@@ -83,10 +80,7 @@ static enum AVColorSpace topscodec_get_color_space2(const EFBuffer* buf) {
     return ret;
 }
 
-static enum AVColorTransferCharacteristic topscodec_get_color_trc(
-    const EFBuffer* buf) {
-    return AVCOL_TRC_UNSPECIFIED;
-}
+static enum AVColorTransferCharacteristic topscodec_get_color_trc(const EFBuffer* buf) { return AVCOL_TRC_UNSPECIFIED; }
 
 static void topscodec_free_buffer(void* opaque, uint8_t* unused) {
     int                  ret;
@@ -94,14 +88,11 @@ static void topscodec_free_buffer(void* opaque, uint8_t* unused) {
     EFCodecDecContext_t* ctx   = (EFCodecDecContext_t*)efbuf->ef_context;
 
     if (atomic_fetch_sub(&efbuf->context_refcount, 1) == 1) {
-        ret = ctx->topscodec_lib_ctx->lib_topscodecDecFrameUnmap(
-            ctx->handle, &efbuf->ef_frame);
+        ret = ctx->topscodec_lib_ctx->lib_topscodecDecFrameUnmap(ctx->handle, &efbuf->ef_frame);
         if (ret != 0)
-            av_log(efbuf->avctx, AV_LOG_ERROR,
-                   "topscodecDecFrameUnmap FAILED.\n");
+            av_log(efbuf->avctx, AV_LOG_ERROR, "topscodecDecFrameUnmap FAILED.\n");
         else
-            av_log(efbuf->avctx, AV_LOG_DEBUG,
-                   "topscodecDecFrameUnmap SUCCESS.\n");
+            av_log(efbuf->avctx, AV_LOG_DEBUG, "topscodecDecFrameUnmap SUCCESS.\n");
     }
 }
 
@@ -110,18 +101,16 @@ static int topscodec_buf_increase_ref(EFBuffer* efbuf) {
     return 0;
 }
 
-static int topscodec_buf_to_bufref(const EFBuffer* efbuf, int plane,
-                                   AVBufferRef** buf, size_t planesize) {
+static int topscodec_buf_to_bufref(const EFBuffer* efbuf, int plane, AVBufferRef** buf, size_t planesize) {
     int ret = 0;
 
     if (plane >= efbuf->ef_frame.plane_num) return AVERROR(EINVAL);
 
     /* even though most encoders return 0 in data_offset encoding vp8 does
     require this value */
-    *buf =
-        av_buffer_create((char*)efbuf->ef_frame.plane[plane].dev_addr
-                         /*+ efbuf->ef_frame.plane[plane].offline*/,
-                         planesize, topscodec_free_buffer, (EFBuffer*)efbuf, 0);
+    *buf = av_buffer_create((char*)efbuf->ef_frame.plane[plane].dev_addr
+                            /*+ efbuf->ef_frame.plane[plane].offline*/,
+                            planesize, topscodec_free_buffer, (EFBuffer*)efbuf, 0);
     if (!*buf) return AVERROR(ENOMEM);
 
     ret = topscodec_buf_increase_ref((EFBuffer*)efbuf);
@@ -160,19 +149,16 @@ int ff_topscodec_avframe_to_efbuf(const AVFrame* avframe, EFBuffer* efbuf) {
 
     for (int i = 0; i < efbuf->ef_frame.plane_num; i++) {
         efbuf->ef_frame.plane[i].stride = avframe->linesize[i];
-        data = (void*)efbuf->ef_frame.plane[i].dev_addr;
+        data                            = (void*)efbuf->ef_frame.plane[i].dev_addr;
         /*for encodeing, only support yuv420p*/
-        nBytes = efbuf->ef_frame.plane[i].stride * efbuf->ef_frame.height *
-                 (i ? 1.0 / 2 : 1);
+        nBytes = efbuf->ef_frame.plane[i].stride * efbuf->ef_frame.height * (i ? 1.0 / 2 : 1);
         av_assert0(data);
         av_assert0(avframe->data[i]);
         av_assert0(nBytes > 0);
-        tops_ret =
-            topsruntime->lib_topsMemcpyHtoD(data, avframe->data[i], nBytes);
+        tops_ret = topsruntime->lib_topsMemcpyHtoD(data, avframe->data[i], nBytes);
         if (tops_ret != topsSuccess) {
-            av_log(log_ctx, AV_LOG_ERROR,
-                   "h2d: host %p -> dev %p, size %d fuc: %s, line:%d\n",
-                   avframe->data[i], data, nBytes, __func__, __LINE__);
+            av_log(log_ctx, AV_LOG_ERROR, "h2d: host %p -> dev %p, size %d fuc: %s, line:%d\n", avframe->data[i], data,
+                   nBytes, __func__, __LINE__);
             return AVERROR_BUG;
         }
     }
@@ -214,36 +200,29 @@ int ff_topscodec_efbuf_to_avframe(const EFBuffer* efbuf, AVFrame* avframe) {
 
     /* 1. get references to the actual data */
     if (!ctx->zero_copy) { /*Not support yet*/
-        ret =
-            av_image_fill_linesizes(linesizes, avframe->format, avframe->width);
+        ret = av_image_fill_linesizes(linesizes, avframe->format, avframe->width);
         if (ret < 0) {
-            av_log(log_ctx, AV_LOG_ERROR,
-                   "av_image_fill_plane_sizes failed.\n");
+            av_log(log_ctx, AV_LOG_ERROR, "av_image_fill_plane_sizes failed.\n");
             return AVERROR_BUG;
         }
 
         for (int i = 0; i < 4; i++) {
             linesizes1[i] = linesizes[i];
             data[i]       = (uint8_t*)efbuf->ef_frame.plane[i].dev_addr;
-            av_log(log_ctx, AV_LOG_DEBUG, "ptrlinesizes[%d]:%ld\n", i,
-                   linesizes1[i]);
+            av_log(log_ctx, AV_LOG_DEBUG, "ptrlinesizes[%d]:%ld\n", i, linesizes1[i]);
         }
 
-        ret = av_image_fill_plane_sizes(planesizes, avframe->format,
-                                        avframe->height, linesizes1);
+        ret = av_image_fill_plane_sizes(planesizes, avframe->format, avframe->height, linesizes1);
         if (ret < 0) {
-            av_log(log_ctx, AV_LOG_ERROR,
-                   "av_image_fill_plane_sizes failed.\n");
+            av_log(log_ctx, AV_LOG_ERROR, "av_image_fill_plane_sizes failed.\n");
             return AVERROR_BUG;
         }
 
-        if (av_pix_fmt_count_planes(avframe->format) !=
-            efbuf->ef_frame.plane_num) {
+        if (av_pix_fmt_count_planes(avframe->format) != efbuf->ef_frame.plane_num) {
             av_log(log_ctx, AV_LOG_ERROR,
                    "pix:%s,efbuf plane [%d]is not suitable for "
                    "ffmpeg[%d].\n",
-                   av_get_pix_fmt_name(avframe->format),
-                   efbuf->ef_frame.plane_num,
+                   av_get_pix_fmt_name(avframe->format), efbuf->ef_frame.plane_num,
                    av_pix_fmt_count_planes(avframe->format));
             return AVERROR_BUG;
         }
@@ -263,20 +242,17 @@ int ff_topscodec_efbuf_to_avframe(const EFBuffer* efbuf, AVFrame* avframe) {
             }
 
             if (planesizes[i] == 0) {
-                av_log(ctx, AV_LOG_ERROR, "planesizes[%d] err,value:%lu\n", i,
-                       planesizes[i]);
+                av_log(ctx, AV_LOG_ERROR, "planesizes[%d] err,value:%lu\n", i, planesizes[i]);
                 av_frame_unref(avframe);
                 return AVERROR_BUG;
             }
             av_assert0(planesizes[i] > 0);
             av_assert0(data[i]);
             av_assert0(avframe->data[i]);
-            ret = topsruntime->lib_topsMemcpyDtoD(avframe->data[i], data[i],
-                                                  planesizes[i]);
+            ret = topsruntime->lib_topsMemcpyDtoD(avframe->data[i], data[i], planesizes[i]);
             if (ret != topsSuccess) {
-                av_log(ctx, AV_LOG_ERROR,
-                       "d2x: host %p -> dev 0x%lx, size %lu\n", data[i],
-                       (void*)avframe->data[i], planesizes[i]);
+                av_log(ctx, AV_LOG_ERROR, "d2x: host %p -> dev 0x%p, size %lu\n", data[i], (void*)avframe->data[i],
+                       planesizes[i]);
                 av_log(ctx, AV_LOG_ERROR,
                        "topsMemcpyDtoD error occur, func: %s, "
                        "line: %d\n",
@@ -284,11 +260,10 @@ int ff_topscodec_efbuf_to_avframe(const EFBuffer* efbuf, AVFrame* avframe) {
                 av_frame_unref(avframe);
                 return AVERROR_BUG;
             }
-            av_log(log_ctx, AV_LOG_DEBUG, "d2d: host %p -> dev %p, size %lu\n",
-                   data[i], avframe->data[i], planesizes[i]);
+            av_log(log_ctx, AV_LOG_DEBUG, "d2d: host %p -> dev %p, size %lu\n", data[i], avframe->data[i],
+                   planesizes[i]);
         }  // for
-        ret = topscodec->lib_topscodecDecFrameUnmap(ctx->handle,
-                                                    &efbuf->ef_frame);
+        ret = topscodec->lib_topscodecDecFrameUnmap(ctx->handle, &efbuf->ef_frame);
         if (ret != 0) {
             av_log(log_ctx, AV_LOG_ERROR, "topscodecDecFrameUnmap FAILED.\n");
             av_frame_unref(avframe);
@@ -297,8 +272,7 @@ int ff_topscodec_efbuf_to_avframe(const EFBuffer* efbuf, AVFrame* avframe) {
         av_log(log_ctx, AV_LOG_DEBUG, "topscodecDecFrameUnmap SUCCESS.\n");
     } else { /*zero copy*/
         for (int i = 0; i < efbuf->ef_frame.plane_num; i++) {
-            ret = topscodec_buf_to_bufref(efbuf, i, &avframe->buf[i],
-                                          planesizes[i]);
+            ret = topscodec_buf_to_bufref(efbuf, i, &avframe->buf[i], planesizes[i]);
             if (ret) return ret;
 
             avframe->linesize[i] = efbuf->ef_frame.plane[i].stride;
@@ -309,8 +283,7 @@ int ff_topscodec_efbuf_to_avframe(const EFBuffer* efbuf, AVFrame* avframe) {
 
     /* 2. get avframe information */
     avframe->key_frame = 0;
-    if (efbuf->ef_frame.pic_type == TOPSCODEC_PIC_TYPE_IDR ||
-        efbuf->ef_frame.pic_type == TOPSCODEC_PIC_TYPE_I)
+    if (efbuf->ef_frame.pic_type == TOPSCODEC_PIC_TYPE_IDR || efbuf->ef_frame.pic_type == TOPSCODEC_PIC_TYPE_I)
         avframe->key_frame = 1;
 
     avframe->color_primaries = topscodec_get_color_primaries(efbuf);
@@ -319,9 +292,7 @@ int ff_topscodec_efbuf_to_avframe(const EFBuffer* efbuf, AVFrame* avframe) {
     avframe->color_trc       = topscodec_get_color_trc(efbuf);
 
     if (log_ctx->pkt_timebase.num && log_ctx->pkt_timebase.den)
-        avframe->pts =
-            av_rescale_q(efbuf->ef_frame.pts, (AVRational){1, 10000000},
-                         log_ctx->pkt_timebase);
+        avframe->pts = av_rescale_q(efbuf->ef_frame.pts, (AVRational){1, 10000000}, log_ctx->pkt_timebase);
     else
         avframe->pts = efbuf->ef_frame.pts;
 
@@ -357,8 +328,7 @@ int ff_topscodec_efbuf_to_avpkt(const EFBuffer* efbuf, AVPacket* avpkt) {
     avpkt->data = (void*)efbuf->ef_pkt.mem_addr;
     avpkt->dts = avpkt->pts = efbuf->ef_pkt.pts;
 
-    if (efbuf->ef_pkt.stream_type == TOPSCODEC_NALU_TYPE_IDR ||
-        efbuf->ef_pkt.stream_type == TOPSCODEC_NALU_TYPE_I)
+    if (efbuf->ef_pkt.stream_type == TOPSCODEC_NALU_TYPE_IDR || efbuf->ef_pkt.stream_type == TOPSCODEC_NALU_TYPE_I)
         avpkt->flags |= AV_PKT_FLAG_KEY;
 
     if (efbuf->ef_pkt.stream_type == TOPSCODEC_NALU_TYPE_UNKNOWN) {
@@ -402,27 +372,23 @@ int ff_topscodec_avpkt_to_efbuf(const AVPacket* avpkt, EFBuffer* efbuf) {
             memcpy(data, avpkt->data, avpkt->size);
         } else {
             // pthread_mutex_lock(&g_buf_mutex);
-            tops_ret = topsruntimes->lib_topsMemcpyHtoD(data, avpkt->data,
-                                                        avpkt->size);
+            tops_ret = topsruntimes->lib_topsMemcpyHtoD(data, avpkt->data, avpkt->size);
             if (tops_ret != topsSuccess) {
                 av_log(avctx, AV_LOG_ERROR, "topsMemcpyHtoD failed!\n");
                 pthread_mutex_unlock(&g_buf_mutex);
                 return AVERROR(EPERM);
             }
-            av_log(avctx, AV_LOG_DEBUG,
-                   "h2d(topsMemcpyHtoD): host %p -> dev %p, size %u \n",
-                   avpkt->data, data, efpkt->data_len);
+            av_log(avctx, AV_LOG_DEBUG, "h2d(topsMemcpyHtoD): host %p -> dev %p, size %u \n", avpkt->data, data,
+                   efpkt->data_len);
             // pthread_mutex_unlock(&g_buf_mutex);
         }
     }
 
     efpkt->mem_addr  = ctx->mem_addr;
     efpkt->alloc_len = ctx->stream_buf_size;
-    av_log(avctx, AV_LOG_DEBUG, "Buf size:%d, addr:0x%lx \n",
-           ctx->stream_buf_size, efpkt->mem_addr);
+    av_log(avctx, AV_LOG_DEBUG, "Buf size:%d, addr:0x%lx \n", ctx->stream_buf_size, efpkt->mem_addr);
 
-    if (avpkt->flags & AV_PKT_FLAG_KEY)
-        efpkt->stream_type = TOPSCODEC_NALU_TYPE_I;
+    if (avpkt->flags & AV_PKT_FLAG_KEY) efpkt->stream_type = TOPSCODEC_NALU_TYPE_I;
 
     return 0;
 }
@@ -448,8 +414,8 @@ topscodecPixelFormat_t avpixfmt_2_topspixfmt(enum AVPixelFormat fmt) {
         out = TOPSCODEC_PIX_FMT_BGR3P;
     else if (fmt == AV_PIX_FMT_GRAY8)
         out = TOPSCODEC_PIX_FMT_MONOCHROME;
-    else if (fmt == AV_PIX_FMT_GRAY10LE)
-        out = TOPSCODEC_PIX_FMT_MONOCHROME_10BIT;
+    // else if (fmt == AV_PIX_FMT_GRAY10LE)
+    //     out = TOPSCODEC_PIX_FMT_MONOCHROME_10BIT;
     else if (fmt == AV_PIX_FMT_YUV444P10LE)
         out = TOPSCODEC_PIX_FMT_YUV444_10BIT;
     else if (fmt == AV_PIX_FMT_P010LE_EF)
@@ -483,8 +449,8 @@ enum AVPixelFormat topspixfmt_2_avpixfmt(topscodecPixelFormat_t fmt) {
         out = AV_PIX_FMT_RGB24P;
     else if (fmt == TOPSCODEC_PIX_FMT_BGR3P)
         out = AV_PIX_FMT_BGR24P;
-    else if (fmt == TOPSCODEC_PIX_FMT_MONOCHROME_10BIT)
-        out = AV_PIX_FMT_GRAY10LE;
+    // else if (fmt == TOPSCODEC_PIX_FMT_MONOCHROME_10BIT)
+    //     out = AV_PIX_FMT_GRAY10LE;//
     else if (fmt == TOPSCODEC_PIX_FMT_YUV444_10BIT)
         out = AV_PIX_FMT_YUV444P10LE;
 

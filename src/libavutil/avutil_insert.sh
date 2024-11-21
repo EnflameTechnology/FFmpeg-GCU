@@ -1,8 +1,10 @@
 #! /bin/bash
 
+
 # Add the following line to the end of the file
 #hwcontext_internal.h
-END='extern const HWContextType ff_hwcontext_type_cuda;'
+WS='[[:space:]]*'
+END="extern${WS}const${WS}HWContextType${WS}ff_hwcontext_type_cuda;"
 TOPSCODEC='extern const HWContextType ff_hwcontext_type_topscodec;/*enflame*/'
 FILE='hwcontext_internal.h'
 
@@ -11,7 +13,7 @@ FILE='hwcontext_internal.h'
     exit 0
  fi
 
-sed -i "/${END}/a \
+sed -E -i "/${END}/a \
 ${TOPSCODEC} " ${FILE}
 
 #hwcontext.h
@@ -23,52 +25,118 @@ sed -i "/${HW_END_H}/a \
 ${HW_TYPE_H} " ${HW_FILE_H}
 
 #hwcontext.c
-HW_END_C='static const char \*const hw_type_names\[\] = {'
+HW_END_C="static${WS}const${WS}char${WS}\*hw_type_names\[\]${WS}=${WS}\{"
 HW_TYPE_C='\\t[AV_HWDEVICE_TYPE_TOPSCODEC] = "topscodec",'
 HW_FILE_C='hwcontext.c'
 
-sed -i "/${HW_END_C}/a \
+sed -E -i "/${HW_END_C}/a \
 ${HW_TYPE_C} " ${HW_FILE_C}
 
+# retry
+HW_END_C="static${WS}const${WS}char${WS}\*const${WS}hw_type_names\[\]${WS}=${WS}\{"
+HW_TYPE_C='\\t[AV_HWDEVICE_TYPE_TOPSCODEC] = "topscodec",'
+sed -E -i "/${HW_END_C}/a \
+${HW_TYPE_C} " ${HW_FILE_C}
+
+
 #hwcontext.c 2
-HW_END_C2='static const HWContextType \* const hw_table\[\] = {'
+HW_END_C2="static${WS}const${WS}HWContextType${WS}\*hw_table\[\]${WS}=${WS}\{"
 HW_TYPE_C2='#if CONFIG_TOPSCODEC\n\t&ff_hwcontext_type_topscodec,\n#endif'
 
-sed -i "/${HW_END_C2}/a \
+sed -E -i "/${HW_END_C2}/a \
+${HW_TYPE_C2} " ${HW_FILE_C}
+# retry
+HW_END_C2="static${WS}const${WS}HWContextType${WS}\*${WS}const${WS}hw_table\[\]${WS}=${WS}\{"
+HW_TYPE_C2='#if CONFIG_TOPSCODEC\n\t&ff_hwcontext_type_topscodec,\n#endif'
+sed -E -i "/${HW_END_C2}/a \
 ${HW_TYPE_C2} " ${HW_FILE_C}
 
+
 #Makefile
-M_END_AVTUILS='film_grain_params.h'
-M_HEANDER_AVTUILS='\\t   hwcontext_topscodec.h'
+M_END_AVTUILS="xtea.h" 
+M_HEANDER_AVTUILS='\\t  hwcontext_topscodec.h \\'
 M_AVTUILS='Makefile'
 
-sed -i "/${M_END_AVTUILS}/a \
-${M_HEANDER_AVTUILS} " ${M_AVTUILS}
+sed -E -i "/${M_END_AVTUILS}/a \
+${M_HEANDER_AVTUILS}" ${M_AVTUILS}
 
 #Makefile 2
-M_END_AVTUILS2='OBJS-$(CONFIG_CUDA)                     += hwcontext_cuda.o'
+M_END_AVTUILS2="OBJS-\\$\(CONFIG_CUDA\)${WS}\+=${WS}hwcontext_cuda.o"
 M_OBJ_AVTUILS2='OBJS-$(CONFIG_TOPSCODEC)                += hwcontext_topscodec.o'
 
-sed -i "/${M_END_AVTUILS2}/a \
-${M_OBJ_AVTUILS2} " ${M_AVTUILS}
+sed -E -i "/${M_END_AVTUILS2}/a \
+${M_OBJ_AVTUILS2}" ${M_AVTUILS}
 
 #Makefile 3
-M_END_AVTUILS3='SKIPHEADERS-$(HAVE_CUDA_H)             += hwcontext_cuda.h'
+M_END_AVTUILS3="SKIPHEADERS-\\$\(HAVE_CUDA_H\)${WS}\+=${WS}hwcontext_cuda.h"
 M_OBJ_AVTUILS3='SKIPHEADERS-$(CONFIG_TOPSCODEC)        += hwcontext_topscodec.h'
 
-sed -i "/${M_END_AVTUILS3}/i \
+sed -E -i "/${M_END_AVTUILS3}/i \
 ${M_OBJ_AVTUILS3} " ${M_AVTUILS}
 
 #pixdesc.c
-PD_END='\[AV_PIX_FMT_CUDA\] = {'
-PD_TYPE='\\t\[AV_PIX_FMT_EFCCODEC\] = { \n\t\t\.name = "topscodec", \n\t\t\.flags = AV_PIX_FMT_FLAG_HWACCEL, \n\t},'
+PD_END="\[AV_PIX_FMT_CUDA\]${WS}=${WS}\{"
+PD_TYPE='\\t\[AV_PIX_FMT_TOPSCODEC\] = { \n\t\t\.name = "topscodec", \n\t\t\.flags = AV_PIX_FMT_FLAG_HWACCEL, \n\t},'
 PIXDESC='pixdesc.c'
 
-sed -i "/${PD_END}/i \
+sed -E  -i "/${PD_END}/i \
 ${PD_TYPE}" ${PIXDESC}
 
+# for 3.2
+grep "av_image_fill_plane_sizes" imgutils.h
+if [ $? -ne 0 ]; then
+    FUN_END='#endif'
+    FUN_CON=$(cat << EOF
+    int av_image_fill_plane_sizes(size_t size[4], enum AVPixelFormat pix_fmt,\n \
+                              int height, const ptrdiff_t linesizes[4]);        
+EOF
+    )
+
+sed -i "/${FUN_END}/i \
+${FUN_CON}" imgutils.h
+ 
+ FUN_END='void av_image_fill_max_pixsteps(int max_pixsteps'
+FUN_CON=$(cat << EOF
+int av_image_fill_plane_sizes(size_t sizes[4], enum AVPixelFormat pix_fmt,\n \
+                              int height, const ptrdiff_t linesizes[4])\n \
+{\n  \
+    int i, has_plane[4] = { 0 };\n \
+    const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(pix_fmt);\n \
+    memset(sizes    , 0, sizeof(sizes[0])*4);\n\
+    if (!desc || desc->flags & AV_PIX_FMT_FLAG_HWACCEL)\n \
+        return AVERROR(EINVAL);\n\
+    if (linesizes[0] > SIZE_MAX / height)\n\
+        return AVERROR(EINVAL);\n\
+    sizes[0] = linesizes[0] * (size_t)height;\n\
+    if (desc->flags & AV_PIX_FMT_FLAG_PAL ||\n\
+        desc->flags & 0) {\n\
+        sizes[1] = 256 * 4; /* palette is stored here as 256 32 bits words */\n\
+        return 0;\n\
+    }\n\
+    for (i = 0; i < 4; i++)\n\
+        has_plane[desc->comp[i].plane] = 1;\n\
+    for (i = 1; i < 4 && has_plane[i]; i++) {\n\
+        int h, s = (i == 1 || i == 2) ? desc->log2_chroma_h : 0;\n\
+        h = (height + (1 << s) - 1) >> s;\n\
+        if (linesizes[i] > SIZE_MAX / h)\n\
+            return AVERROR(EINVAL);\n\
+        sizes[i] = (size_t)h * linesizes[i];\n\
+    } \n\
+    return 0; \n\
+} 
+EOF
+    )
+
+sed -i "/${FUN_END}/i \
+${FUN_CON}" imgutils.c
+
+fi
+
+
+
+
 #pixdesc.c 2
-echo "$file" | grep "attribute_deprecated int step_minus1;"
+echo "$file" | grep "attribute_deprecated${WS}int${WS}step_minus1;"
 if [ $? -eq 0 ]; then
     PD_END2='\[AV_PIX_FMT_X2RGB10LE\] = {'
     PD_TYPE2_RGB24P=$(cat << EOF
@@ -171,10 +239,10 @@ sed -i "/${PD_END2}/i \
 ${PD_TYPE2_RGB24P} ${PD_TYPE2_BGR24P} ${PD_TYPE2_P010LE}" ${PIXDESC}
 
 #pixfmt.h
-PIX_END='AV_PIX_FMT_NB'
+PIX_END="AV_PIX_FMT_NB"
 RGB24P='\\tAV_PIX_FMT_RGB24P,     ///< planar RGB 8:8:8, 24bpp, RRR...GGG...BBB...\n'
 BGR24P='\tAV_PIX_FMT_BGR24P,     ///< planar BGR 8:8:8, 24bpp, BBB...GGG...RRR...\n'
-EFCODEC='\tAV_PIX_FMT_EFCCODEC,\n'
+EFCODEC='\tAV_PIX_FMT_TOPSCODEC,\n'
 P010LE='\tAV_PIX_FMT_P010LE_EF, ///< like NV12, with 10bpp per component, little-endian\n'
 
 PIX_FILE='pixfmt.h'

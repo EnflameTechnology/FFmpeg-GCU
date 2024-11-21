@@ -1,2 +1,4 @@
 # this file is used to github
-build
+build*
+*.yuv
+*.run
