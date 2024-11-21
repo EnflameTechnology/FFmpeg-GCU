@@ -10,6 +10,8 @@
 ## 如何编译？
 
 下载tops-codec-headers项目，在tops-codec-headers文件夹中执行：
+https://github.com/EnflameTechnology/tops-codec-headers
+
 ```
 make install
 ```
