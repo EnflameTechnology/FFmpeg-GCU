@@ -39,6 +39,7 @@
 #include "libavutil/thread.h"
 #include "libavutil/time.h"
 #include "libavutil/version.h"
+#include "version.h"
 #define TOPSCODEC_FREE_FUNCTIONS 1
 #define TOPSCODEC_LOAD_FUNCTIONS 1
 #include "avcodec.h"
@@ -47,16 +48,13 @@
 #include "internal.h"
 #include "libavutil/hwcontext.h"
 #include "libavutil/hwcontext_topscodec.h"
-#include "version.h"
 
-#if AV_VERSION_INT(LIBAVCODEC_VERSION_MAJOR, LIBAVCODEC_VERSION_MINOR, LIBAVCODEC_VERSION_MICRO) > \
-    AV_VERSION_INT(59, 18, 100)  // 5.0
+#if LIBAVCODEC_VERSION_INT >  AV_VERSION_INT(59, 18, 100)  // 5.0
 #include "codec_internal.h"
 #include "config_components.h"
-#elif AV_VERSION_INT(LIBAVCODEC_VERSION_MAJOR, LIBAVCODEC_VERSION_MINOR, LIBAVCODEC_VERSION_MICRO) >= \
-    AV_VERSION_INT(58, 134, 100)  // 4.4
-#include "decode.h"               //not support 3.2
-#include "hwconfig.h"             //not support 3.2
+#elif LIBAVCODEC_VERSION_INT >= AV_VERSION_INT(58, 18, 100)  // 4.0
+#include "decode.h"               //3.2 is not support 
+#include "hwconfig.h"             //3.2 is not support 
 #endif
 
 static pthread_mutex_t g_dec_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -179,8 +177,7 @@ static av_cold int topscodec_decode_init(AVCodecContext* avctx) {
     topsError_t              tops_ret              = TOPSCODEC_SUCCESS;
     void*                    tmp                   = NULL;
     char                     card_idx[sizeof(int)] = {0};
-#if AV_VERSION_INT(LIBAVCODEC_VERSION_MAJOR, LIBAVCODEC_VERSION_MINOR, LIBAVCODEC_VERSION_MICRO) <= \
-    AV_VERSION_INT(57, 64, 100)  // 3.2
+#if LIBAVCODEC_VERSION_INT < AV_VERSION_INT(58, 18, 100) 
     AVBSFContext* bsf = NULL;
 #endif
 
@@ -281,8 +278,7 @@ static av_cold int topscodec_decode_init(AVCodecContext* avctx) {
             ctx->codec_type = TOPSCODEC_AVS;
             break;
 #endif
-#if AV_VERSION_INT(LIBAVCODEC_VERSION_MAJOR, LIBAVCODEC_VERSION_MINOR, LIBAVCODEC_VERSION_MICRO) > \
-    AV_VERSION_INT(57, 64, 100)
+#if LIBAVCODEC_VERSION_INT >= AV_VERSION_INT(58, 18, 100)
 #if CONFIG_AVS2_TOPSCODEC_DECODER
         case AV_CODEC_ID_AVS2:
             ctx->codec_type = TOPSCODEC_AVS2;
@@ -298,8 +294,7 @@ static av_cold int topscodec_decode_init(AVCodecContext* avctx) {
             av_log(avctx, AV_LOG_ERROR, "Invalid tops codec %s\n", avcodec_descriptor_get(avctx->codec->id)->long_name);
             return AVERROR_BUG;
     }
-#if AV_VERSION_INT(LIBAVCODEC_VERSION_MAJOR, LIBAVCODEC_VERSION_MINOR, LIBAVCODEC_VERSION_MICRO) <= \
-    AV_VERSION_INT(57, 64, 100)  // 3.2
+#if LIBAVCODEC_VERSION_INT < AV_VERSION_INT(58, 18, 100)
     ctx->bsf = NULL;
     if (avctx->codec->id == AV_CODEC_ID_H264 || avctx->codec->id == AV_CODEC_ID_HEVC) {
         if (avctx->codec->id == AV_CODEC_ID_H264)
@@ -719,8 +714,7 @@ static av_cold int topscodec_decode_close(AVCodecContext* avctx) {
         return AVERROR_BUG;
     }
     ctx = (EFCodecDecContext_t*)avctx->priv_data;
-#if AV_VERSION_INT(LIBAVCODEC_VERSION_MAJOR, LIBAVCODEC_VERSION_MINOR, LIBAVCODEC_VERSION_MICRO) <= \
-    AV_VERSION_INT(57, 64, 100)  // 3.2
+#if LIBAVCODEC_VERSION_INT < AV_VERSION_INT(58, 18, 100)
     if (ctx->bsf) av_bsf_free(&ctx->bsf);
 #endif
     if (ctx->av_pkt) av_packet_free(&ctx->av_pkt);
@@ -843,8 +837,7 @@ static int topscodec_recived_helper(AVCodecContext* avctx, AVFrame* avframe, int
     return ret;
 }
 
-#if AV_VERSION_INT(LIBAVCODEC_VERSION_MAJOR, LIBAVCODEC_VERSION_MINOR, LIBAVCODEC_VERSION_MICRO) <= \
-    AV_VERSION_INT(57, 64, 100)  // n3.2
+#if LIBAVCODEC_VERSION_INT < AV_VERSION_INT(58, 18, 100)
 static int topscodec_decode(AVCodecContext* avctx, void* data, int* got_frame, AVPacket* avpkt) {
     EFCodecDecContext_t* ctx             = NULL;
     AVFrame*             frame           = data;
@@ -982,8 +975,7 @@ fail:
 }
 #endif
 
-#if AV_VERSION_INT(LIBAVCODEC_VERSION_MAJOR, LIBAVCODEC_VERSION_MINOR, LIBAVCODEC_VERSION_MICRO) >= \
-    AV_VERSION_INT(58, 134, 100)//n4.4
+#if LIBAVCODEC_VERSION_INT >= AV_VERSION_INT(58, 100, 100) //n4.0
 static int topscodec_receive_frame(AVCodecContext* avctx, AVFrame* frame) {
     EFCodecDecContext_t* ctx;
     int                  ret, ret2;
@@ -1193,8 +1185,7 @@ static const AVOption options[] = {
 };
 
 
-#if AV_VERSION_INT(LIBAVCODEC_VERSION_MAJOR, LIBAVCODEC_VERSION_MINOR, LIBAVCODEC_VERSION_MICRO) >= \
-    AV_VERSION_INT(58, 134, 100) // (58, 134, 100) n4.4
+#if LIBAVCODEC_VERSION_INT <= AV_VERSION_INT(58, 18, 100)
 static const AVCodecHWConfigInternal* topscodec_hw_configs[] = {
     &(const AVCodecHWConfigInternal){
         .public  = {.pix_fmt     = AV_PIX_FMT_TOPSCODEC,
@@ -1213,8 +1204,7 @@ static const AVCodecHWConfigInternal* topscodec_hw_configs[] = {
         .version    = LIBAVUTIL_VERSION_INT,              \
     };
 
-#if AV_VERSION_INT(LIBAVCODEC_VERSION_MAJOR, LIBAVCODEC_VERSION_MINOR, LIBAVCODEC_VERSION_MICRO) <= \
-    AV_VERSION_INT(57, 64, 100)  // n3.2
+#if LIBAVCODEC_VERSION_INT < AV_VERSION_INT(58, 18, 100) //n3.x
 #define TOPSCODECDEC(NAME, LONGNAME, CODEC, BSF_NAME)                                                                \
     TOPSCODEC_CLASS(NAME)                                                                                            \
     AVHWAccel ff_##NAME##_topscodec_hwaccel = {                                                                      \
@@ -1242,8 +1232,7 @@ static const AVCodecHWConfigInternal* topscodec_hw_configs[] = {
                                          AV_PIX_FMT_P010LE, AV_PIX_FMT_GRAY8, AV_PIX_FMT_NONE},                      \
     }
 
-#elif AV_VERSION_INT(LIBAVCODEC_VERSION_MAJOR, LIBAVCODEC_VERSION_MINOR, LIBAVCODEC_VERSION_MICRO) <= \
-    AV_VERSION_INT(59, 18, 100)
+#elif LIBAVCODEC_VERSION_INT <= AV_VERSION_INT(59, 18, 100) // n4.x
 #define TOPSCODECDEC(NAME, LONGNAME, CODEC, BSF_NAME)                                                                \
     TOPSCODEC_CLASS(NAME)                                                                                            \
     const AVCodec ff_##NAME##_topscodec_decoder = {                                                                  \
@@ -1325,8 +1314,7 @@ TOPSCODECDEC(vp9, "VP9", AV_CODEC_ID_VP9, NULL);
 TOPSCODECDEC(avs, "AVS", AV_CODEC_ID_CAVS, NULL);
 #endif
 
-#if AV_VERSION_INT(LIBAVCODEC_VERSION_MAJOR, LIBAVCODEC_VERSION_MINOR, LIBAVCODEC_VERSION_MICRO) > \
-    AV_VERSION_INT(57, 64, 100)
+#if LIBAVCODEC_VERSION_INT >= AV_VERSION_INT(58, 18, 100)
 #if CONFIG_AVS2_TOPSCODEC_DECODER
 TOPSCODECDEC(avs2, "AVS2", AV_CODEC_ID_AVS2, NULL);
 #endif

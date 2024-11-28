@@ -2,3 +2,5 @@
 build*
 *.yuv
 *.run
+version_collect.sh
+test_version.txt

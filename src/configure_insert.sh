@@ -1,11 +1,6 @@
 #! /bin/bash
 
 # Add the following line to the end of the file
-END='HWACCEL_AUTODETECT_LIBRARY_LIST="'
-END1='--disable-audiotoolbox*'
-END2='HWACCEL_LIBRARY_LIST='
-HW_DECODE_TOPS='topscodec'
-DISABLE='  --disable-topscodec        disable topscodec support [autodetect]'
 
 C_FILE='configure'
 
@@ -15,12 +10,17 @@ C_FILE='configure'
  fi
 
 #configure 1
+END='HWACCEL_AUTODETECT_LIBRARY_LIST="'
+HW_DECODE_TOPS='topscodec'
 sed -i "/${END}/a \
 ${HW_DECODE_TOPS}" ${C_FILE}
 
+END1='--disable-audiotoolbox'
+DISABLE='  --disable-topscodec        disable topscodec support [autodetect]'
 sed -i "/${END1}/a \
 ${DISABLE}" ${C_FILE}
 
+END2='HWACCEL_LIBRARY_LIST='
 sed -i "/${END2}/a \
 ${HW_DECODE_TOPS}" ${C_FILE}
 

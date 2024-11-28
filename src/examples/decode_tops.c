@@ -142,9 +142,7 @@ static int init_decode(const char* in_file, const char* out_file, const char* de
         case AV_CODEC_ID_CAVS:
             p_codec = avcodec_find_decoder_by_name("avs_topscodec");
             break;
-// (58, 134, 100) n4.4
-#if AV_VERSION_INT(LIBAVCODEC_VERSION_MAJOR, LIBAVCODEC_VERSION_MINOR, LIBAVCODEC_VERSION_MICRO) >= \
-    AV_VERSION_INT(58, 134, 100)
+#if LIBAVCODEC_VERSION_INT >=  AV_VERSION_INT(58, 18, 100)
         case AV_CODEC_ID_AVS2:
             p_codec = avcodec_find_decoder_by_name("avs2_topscodec");
             break;
@@ -324,8 +322,7 @@ int main(int argc, char** argv) {
     const char *        in_file, *out_file, *dev_id, *out_fmt, *card_id;
     ffmpeg_log_callback fptrLog;
 
-#if AV_VERSION_INT(LIBAVCODEC_VERSION_MAJOR, LIBAVCODEC_VERSION_MINOR, LIBAVCODEC_VERSION_MICRO) <= \
-    AV_VERSION_INT(57, 64, 100)
+#if LIBAVCODEC_VERSION_INT < AV_VERSION_INT(58, 18, 100)
     /* register all formats and codecs */
     av_register_all();
 #endif

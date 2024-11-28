@@ -66,9 +66,7 @@ static pthread_mutex_t    cb_av_log_lock;
 //     return ret;
 // }
 
-// (58, 134, 100) n4.4
-#if AV_VERSION_INT(LIBAVCODEC_VERSION_MAJOR, LIBAVCODEC_VERSION_MINOR, LIBAVCODEC_VERSION_MICRO) < \
-    AV_VERSION_INT(58, 134, 100)
+#if LIBAVCODEC_VERSION_INT < AV_VERSION_INT(58, 18, 100)
 static enum AVPixelFormat get_hw_format(AVCodecContext* ctx, const enum AVPixelFormat* pix_fmts) {
     return AV_PIX_FMT_TOPSCODEC;
 }
@@ -241,8 +239,7 @@ int main(int argc, char* argv[]) {
     enum AVHWDeviceType type;
     ffmpeg_log_callback fptrLog;
 
-#if AV_VERSION_INT(LIBAVCODEC_VERSION_MAJOR, LIBAVCODEC_VERSION_MINOR, LIBAVCODEC_VERSION_MICRO) <= \
-    AV_VERSION_INT(57, 64, 100)
+#if LIBAVCODEC_VERSION_INT < AV_VERSION_INT(58, 18, 100)
     /* register all formats and codecs */
     av_register_all();
 #endif
@@ -297,9 +294,7 @@ int main(int argc, char* argv[]) {
     fptrLog = log_callback_null;
     av_log_set_level(AV_LOG_DEBUG);
     av_log_set_callback(fptrLog);
-// (58, 134, 100) n4.4
-#if AV_VERSION_INT(LIBAVCODEC_VERSION_MAJOR, LIBAVCODEC_VERSION_MINOR, LIBAVCODEC_VERSION_MICRO) >= \
-    AV_VERSION_INT(58, 134, 100)
+#if LIBAVCODEC_VERSION_INT >= AV_VERSION_INT(58, 18, 100)
     type = av_hwdevice_find_type_by_name(dev_type);
     if (type == AV_HWDEVICE_TYPE_NONE) {
         fprintf(stderr, "Device type %s is not supported.\n", dev_type);
@@ -371,9 +366,7 @@ int main(int argc, char* argv[]) {
         case AV_CODEC_ID_CAVS:
             decoder = avcodec_find_decoder_by_name("avs_topscodec");
             break;
-// (58, 134, 100) n4.4
-#if AV_VERSION_INT(LIBAVCODEC_VERSION_MAJOR, LIBAVCODEC_VERSION_MINOR, LIBAVCODEC_VERSION_MICRO) >= \
-    AV_VERSION_INT(58, 134, 100)
+#if LIBAVCODEC_VERSION_INT >= AV_VERSION_INT(58, 18, 100)
         case AV_CODEC_ID_AVS2:
             decoder = avcodec_find_decoder_by_name("avs2_topscodec");
             break;
@@ -390,9 +383,7 @@ int main(int argc, char* argv[]) {
         fprintf(stderr, "Unsupported codec! \n");
         return -1;
     }
-// (58, 134, 100) n4.4
-#if AV_VERSION_INT(LIBAVCODEC_VERSION_MAJOR, LIBAVCODEC_VERSION_MINOR, LIBAVCODEC_VERSION_MICRO) >= \
-    AV_VERSION_INT(58, 134, 100)
+#if LIBAVCODEC_VERSION_INT >= AV_VERSION_INT(58, 18, 100)
     for (i = 0;; i++) {
         const AVCodecHWConfig* config = avcodec_get_hw_config(decoder, i);
         if (!config) {

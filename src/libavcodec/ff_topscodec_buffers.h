@@ -24,14 +24,13 @@
 #include <stdatomic.h>
 #include <stddef.h>
 #include <tops/dynlink_tops_loader.h>
-
+#include "version.h"
 #include "libavcodec/avcodec.h"
 #include "libavutil/buffer.h"
 #include "libavutil/frame.h"
 #include "libavutil/hwcontext.h"
 
-#if AV_VERSION_INT(LIBAVCODEC_VERSION_MAJOR, LIBAVCODEC_VERSION_MINOR, LIBAVCODEC_VERSION_MICRO) >= \
-    AV_VERSION_INT(58, 134, 100)
+#if LIBAVCODEC_VERSION_INT >= AV_VERSION_INT(58, 18, 100)
 #include "packet.h"  //not support for 3.2
 #endif
 

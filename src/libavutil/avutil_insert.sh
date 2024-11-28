@@ -2,55 +2,45 @@
 
 
 # Add the following line to the end of the file
-#hwcontext_internal.h
 WS='[[:space:]]*'
-END="extern${WS}const${WS}HWContextType${WS}ff_hwcontext_type_cuda;"
-TOPSCODEC='extern const HWContextType ff_hwcontext_type_topscodec;/*enflame*/'
-FILE='hwcontext_internal.h'
 
- if grep  -Fq "topscodec" $FILE;then
+HW_FILE_H='hwcontext.h'
+ if grep  -Fq "topscodec" $HW_FILE_H;then
     echo "find topscodec exit"
     exit 0
  fi
 
-sed -E -i "/${END}/a \
-${TOPSCODEC} " ${FILE}
+# 3.0 3.2 does not have hwcontext_internal.h
+FILE='hwcontext_internal.h'
+if [ -f $FILE ]; then
+    END="extern${WS}const${WS}HWContextType${WS}ff_hwcontext_type_cuda;"
+    TOPSCODEC='extern const HWContextType ff_hwcontext_type_topscodec;/*enflame*/'
+    sed -E -i "/${END}/a \
+    ${TOPSCODEC} " ${FILE}
+fi
 
 #hwcontext.h
 HW_END_H='AV_HWDEVICE_TYPE_CUDA,'
 HW_TYPE_H='\\tAV_HWDEVICE_TYPE_TOPSCODEC,'
 HW_FILE_H='hwcontext.h'
-
 sed -i "/${HW_END_H}/a \
 ${HW_TYPE_H} " ${HW_FILE_H}
 
-#hwcontext.c
-HW_END_C="static${WS}const${WS}char${WS}\*hw_type_names\[\]${WS}=${WS}\{"
-HW_TYPE_C='\\t[AV_HWDEVICE_TYPE_TOPSCODEC] = "topscodec",'
+# 3.0 3.2 does not have hwcontext.c
 HW_FILE_C='hwcontext.c'
+if [ -f $FILE ]; then
+    HW_END_C="hw_type_names\[\]${WS}=${WS}\{"
+    HW_TYPE_C="\\\t[AV_HWDEVICE_TYPE_TOPSCODEC] = \"topscodec\","
+    echo $HW_TYPE_C
+    sed -E -i "/${HW_END_C}/a \
+    ${HW_TYPE_C} " ${HW_FILE_C}
+fi
 
-sed -E -i "/${HW_END_C}/a \
-${HW_TYPE_C} " ${HW_FILE_C}
-
-# retry
-HW_END_C="static${WS}const${WS}char${WS}\*const${WS}hw_type_names\[\]${WS}=${WS}\{"
-HW_TYPE_C='\\t[AV_HWDEVICE_TYPE_TOPSCODEC] = "topscodec",'
-sed -E -i "/${HW_END_C}/a \
-${HW_TYPE_C} " ${HW_FILE_C}
-
-
-#hwcontext.c 2
-HW_END_C2="static${WS}const${WS}HWContextType${WS}\*hw_table\[\]${WS}=${WS}\{"
+HW_END_C2="hw_table\[\]${WS}=${WS}\{"
 HW_TYPE_C2='#if CONFIG_TOPSCODEC\n\t&ff_hwcontext_type_topscodec,\n#endif'
 
 sed -E -i "/${HW_END_C2}/a \
 ${HW_TYPE_C2} " ${HW_FILE_C}
-# retry
-HW_END_C2="static${WS}const${WS}HWContextType${WS}\*${WS}const${WS}hw_table\[\]${WS}=${WS}\{"
-HW_TYPE_C2='#if CONFIG_TOPSCODEC\n\t&ff_hwcontext_type_topscodec,\n#endif'
-sed -E -i "/${HW_END_C2}/a \
-${HW_TYPE_C2} " ${HW_FILE_C}
-
 
 #Makefile
 M_END_AVTUILS="xtea.h" 
@@ -95,7 +85,7 @@ EOF
 sed -i "/${FUN_END}/i \
 ${FUN_CON}" imgutils.h
  
- FUN_END='void av_image_fill_max_pixsteps(int max_pixsteps'
+FUN_END='void av_image_fill_max_pixsteps(int max_pixsteps'
 FUN_CON=$(cat << EOF
 int av_image_fill_plane_sizes(size_t sizes[4], enum AVPixelFormat pix_fmt,\n \
                               int height, const ptrdiff_t linesizes[4])\n \
@@ -131,8 +121,6 @@ sed -i "/${FUN_END}/i \
 ${FUN_CON}" imgutils.c
 
 fi
-
-
 
 
 #pixdesc.c 2

@@ -164,7 +164,7 @@ if [ -z $ffmpeg_dir ]; then
     fi
 else
     rm -rf ${build_path}
-    echo "ffmpeg_dir: ${ffmpeg_dir}"
+    echo "rm -rf ffmpeg_dir: ${build_path}"
 fi
 
 

@@ -237,9 +237,7 @@ static AVCodec* create_decoder(enum AVCodecID codec_id) {
         case AV_CODEC_ID_CAVS:
             decoder = avcodec_find_decoder_by_name("avs_topscodec");
             break;
-            // (58, 134, 100) n4.4
-#if AV_VERSION_INT(LIBAVCODEC_VERSION_MAJOR, LIBAVCODEC_VERSION_MINOR, LIBAVCODEC_VERSION_MICRO) >= \
-    AV_VERSION_INT(58, 134, 100)
+#if LIBAVCODEC_VERSION_INT >= AV_VERSION_INT(58, 18, 100)
         case AV_CODEC_ID_AVS2:
             decoder = avcodec_find_decoder_by_name("avs2_topscodec");
             break;
@@ -448,9 +446,7 @@ static void* job_thread(void* arg) {
     job_args_t* job = (job_args_t*)arg;
 
     dev_type = DEVICE_NAME;
-// (58, 134, 100) n4.4
-#if AV_VERSION_INT(LIBAVCODEC_VERSION_MAJOR, LIBAVCODEC_VERSION_MINOR, LIBAVCODEC_VERSION_MICRO) >= \
-    AV_VERSION_INT(58, 134, 100)
+#if LIBAVCODEC_VERSION_INT >= AV_VERSION_INT(58, 18, 100)
     type = av_hwdevice_find_type_by_name(dev_type);
     if (type == AV_HWDEVICE_TYPE_NONE) {
         fprintf(stderr, "Device type %s is not supported.\n", dev_type);
@@ -816,8 +812,7 @@ int main(int argc, char* argv[]) {
     float    variance           = 0.0;
     float    standard_deviation = 0.0;
 
-#if AV_VERSION_INT(LIBAVCODEC_VERSION_MAJOR, LIBAVCODEC_VERSION_MINOR, LIBAVCODEC_VERSION_MICRO) <= \
-    AV_VERSION_INT(57, 64, 100)
+#if LIBAVCODEC_VERSION_INT < AV_VERSION_INT(58, 18, 100)
     /* register all formats and codecs */
     av_register_all();
 #endif
@@ -892,8 +887,7 @@ int main(int argc, char* argv[]) {
     }
 
     g_is_av1 = 0;
-#if AV_VERSION_INT(LIBAVCODEC_VERSION_MAJOR, LIBAVCODEC_VERSION_MINOR, LIBAVCODEC_VERSION_MICRO) >= \
-    AV_VERSION_INT(58, 134, 100)
+#if LIBAVCODEC_VERSION_INT >=  AV_VERSION_INT(58, 18, 100)
     // if (end_with(g_in_file, ".av1") || end_with(g_in_file, ".AV1")) {
     if (codec_id == AV_CODEC_ID_AV1) {
         g_is_av1 = 1;
