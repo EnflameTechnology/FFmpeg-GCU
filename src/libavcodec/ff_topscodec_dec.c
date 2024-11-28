@@ -49,10 +49,12 @@
 #include "libavutil/hwcontext.h"
 #include "libavutil/hwcontext_topscodec.h"
 
-#if LIBAVCODEC_VERSION_INT >  AV_VERSION_INT(59, 18, 100)  // 5.0
+#if LIBAVCODEC_VERSION_INT >=  AV_VERSION_INT(59, 27, 100)  // 5.1
 #include "codec_internal.h"
 #include "config_components.h"
-#elif LIBAVCODEC_VERSION_INT >= AV_VERSION_INT(58, 18, 100)  // 4.0
+#endif
+
+#if LIBAVCODEC_VERSION_INT >= AV_VERSION_INT(58, 18, 100)  // 4.0
 #include "decode.h"               //3.2 is not support 
 #include "hwconfig.h"             //3.2 is not support 
 #endif
@@ -1185,7 +1187,7 @@ static const AVOption options[] = {
 };
 
 
-#if LIBAVCODEC_VERSION_INT <= AV_VERSION_INT(58, 18, 100)
+#if LIBAVCODEC_VERSION_INT >= AV_VERSION_INT(58, 18, 100)
 static const AVCodecHWConfigInternal* topscodec_hw_configs[] = {
     &(const AVCodecHWConfigInternal){
         .public  = {.pix_fmt     = AV_PIX_FMT_TOPSCODEC,

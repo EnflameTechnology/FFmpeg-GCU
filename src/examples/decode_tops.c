@@ -274,7 +274,7 @@ static int decode(AVCodecContext* dec_ctx) {
             continue;
         }
         packet.dts = 0;
-        av_log(g_dec_ctx, AV_LOG_DEBUG, "packet pts[%lld], dts:[%lld]\n", packet.pts, packet.dts);
+        av_log(g_dec_ctx, AV_LOG_DEBUG, "packet pts[%ld], dts:[%ld]\n", packet.pts, packet.dts);
         ret = avcodec_send_packet(dec_ctx, &packet);
         if (ret < 0) {
             av_log(dec_ctx, AV_LOG_ERROR, "send pkt failed, ret(%d), %s, %d\n", ret, __FILE__, __LINE__);

@@ -223,7 +223,6 @@ int main(int argc, char* argv[]) {
     const AVCodec*   decoder   = NULL;
     AVDictionary*    dec_opts  = NULL;
 
-    int            i            = 0;
     int            video_stream = 0;
     int            ret          = 0;
     const char*    dev_type     = NULL;
