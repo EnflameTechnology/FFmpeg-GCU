@@ -160,13 +160,17 @@ if [ -z $ffmpeg_dir ]; then
     find ${build_path} -mindepth 1 -maxdepth 1 ! -name "FFmpeg-${FFMPEG_TAG}" -exec rm -rf {} +
     if [ ! -d $ffmpeg_dir ]; then
         echo "download ffmpeg_dir"
-        git clone -b ${FFMPEG_TAG} $FFMPEG_REPO ${ffmpeg_dir}
+        # git clone -b ${FFMPEG_TAG} $FFMPEG_REPO ${ffmpeg_dir}
+        git clone  $FFMPEG_REPO ${ffmpeg_dir}
+        pushd ${ffmpeg_dir}
+        echo "checkout ${FFMPEG_TAG}"
+        git checkout ${FFMPEG_TAG}
+        popd
     fi
 else
     rm -rf ${build_path}
     echo "rm -rf ffmpeg_dir: ${build_path}"
 fi
-
 
 current_date=$(date +%Y%m%d%H%M%S)
 build_ffmpeg=${build_path}/FFmpeg-${FFMPEG_TAG}_with_gcu_patch_${current_date}

@@ -60,6 +60,26 @@ static topscodecColorSpace_t topscodec_get_color_space(const AVFrame* frame) {
     return ret;
 }
 
+static enum AVPictureType tops_2_av_pic_type(topscodecPicType_t type) {
+    switch (type) {
+        case TOPSCODEC_PIC_TYPE_I:
+            return AV_PICTURE_TYPE_I;
+        case TOPSCODEC_PIC_TYPE_P:
+            return AV_PICTURE_TYPE_P;
+        case TOPSCODEC_PIC_TYPE_B:
+            return AV_PICTURE_TYPE_B;
+        default:
+            return AV_PICTURE_TYPE_NONE;
+    }
+    return AV_PICTURE_TYPE_NONE;
+}
+
+static int key_frame(topscodecPicType_t type) {
+    if (type == TOPSCODEC_PIC_TYPE_IDR)
+        return 1;
+    return 0;
+}
+
 // FixMe
 static enum AVColorSpace topscodec_get_color_space2(const EFBuffer* buf) {
     topscodecColorSpace_t cs  = buf->ef_frame.color_space;
@@ -197,6 +217,8 @@ int ff_topscodec_efbuf_to_avframe(const EFBuffer* efbuf, AVFrame* avframe) {
     log_ctx->width       = efbuf->ef_frame.width;
 
     avframe->format = topspixfmt_2_avpixfmt(efbuf->ef_frame.pixel_format);
+    avframe->pict_type = tops_2_av_pic_type(efbuf->ef_frame.pic_type);
+    avframe->key_frame = key_frame(efbuf->ef_frame.pic_type);
 
     /* 1. get references to the actual data */
     if (!ctx->zero_copy) { /*Not support yet*/

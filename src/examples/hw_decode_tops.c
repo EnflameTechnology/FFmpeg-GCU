@@ -383,7 +383,7 @@ int main(int argc, char* argv[]) {
         return -1;
     }
 #if LIBAVCODEC_VERSION_INT >= AV_VERSION_INT(58, 18, 100)
-    for (i = 0;; i++) {
+    for (int i = 0;; i++) {
         const AVCodecHWConfig* config = avcodec_get_hw_config(decoder, i);
         if (!config) {
             fprintf(stderr, "Decoder %s does not support device type %s.\n", decoder->name,
