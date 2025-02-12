@@ -167,6 +167,22 @@ static void sleep_wait(int* sleep_handle) {
     }
 }
 
+static int get_card_id_from_env(){
+    char* card_id_str = getenv("TOPSCODEC_CARD_ID");
+    if (card_id_str == NULL) {
+        return 0;
+    }
+    return atoi(card_id_str);
+}
+
+static int get_device_id_from_env(){
+    char* device_id_str = getenv("TOPSCODEC_DEVICE_ID");
+    if (device_id_str == NULL) {
+        return 0;
+    }
+    return atoi(device_id_str);
+}
+
 static av_cold int topscodec_decode_init(AVCodecContext* avctx) {
     EFCodecDecContext_t*      ctx          = NULL;
     AVHWFramesContext*        hwframe_ctx  = NULL;
@@ -384,6 +400,13 @@ static av_cold int topscodec_decode_init(AVCodecContext* avctx) {
 
     topscodec_get_version(avctx);
     memset(&ctx->caps, 0, sizeof(ctx->caps));
+    if (ctx->card_id == 0) {
+        ctx->card_id = get_card_id_from_env();
+    }
+
+    if (ctx->device_id == 0) {
+        ctx->device_id = get_device_id_from_env();
+    }
     /*get device caps*/
     av_log(avctx, AV_LOG_DEBUG, "topscodecDecGetCaps: type[%d],card[%d]dev[%d]\n", ctx->codec_type, ctx->card_id,
            ctx->device_id);

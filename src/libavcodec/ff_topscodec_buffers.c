@@ -218,7 +218,9 @@ int ff_topscodec_efbuf_to_avframe(const EFBuffer* efbuf, AVFrame* avframe) {
 
     avframe->format = topspixfmt_2_avpixfmt(efbuf->ef_frame.pixel_format);
     avframe->pict_type = tops_2_av_pic_type(efbuf->ef_frame.pic_type);
+    av_log(log_ctx, AV_LOG_DEBUG, "pic_type:%d\n", efbuf->ef_frame.pic_type);
     avframe->key_frame = key_frame(efbuf->ef_frame.pic_type);
+    av_log(log_ctx, AV_LOG_DEBUG, "key_frame:%d\n", avframe->key_frame);
 
     /* 1. get references to the actual data */
     if (!ctx->zero_copy) { /*Not support yet*/

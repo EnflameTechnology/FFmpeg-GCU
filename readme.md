@@ -19,7 +19,7 @@ make install
 
 然后再plugin文件夹中执行，
 ```
-./build_ffmpeg.sh n3.2
+./build_ffmpeg.sh n4.4
 ```
 详细的编译选项可以参考
 ```
@@ -341,6 +341,8 @@ make install
 1）不要使用 FFmpeg topscodec 中的任何 online 参数，OpenCV 会默认采用 FFmpegg 的相关 fileter 进行 yuv2bgr 和 resize 的操作。
 
 2）OpenCV 会将 FFmpeg topscodec 解码后的数据自动进行 YUV2BGR 转换，并且自动进行设备到主机之间数据的拷贝，这个操作极为耗时。
+
+3) 可以通过环境变量'TOPSCODEC_CARD_ID' 和 'TOPSCODEC_DEVICE_ID' 指定card id 和device id.
 
 OpenCV 提供了`VideoCapture`类来提供获取视频帧的功能，其中包括视频文件的解码功能，详细的 API 介绍可以参考 OpenCV 社区提供的文档。
 

@@ -2,7 +2,7 @@
 set -eu -o pipefail
 set +eu +o pipefail
 
-FFMPEG_TAG="n3.2"
+FFMPEG_TAG="n4.4"
 FFMPEG_REPO=${FFMPEG_REPO:-"https://github.com/FFmpeg/FFmpeg.git"}
 # FFMPEG_REPO=${FFMPEG_REPO:-"http://git.enflame.cn/sw/va/FFmpeg.git"} #for debug
 
