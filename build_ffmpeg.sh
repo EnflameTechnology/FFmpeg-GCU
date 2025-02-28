@@ -188,34 +188,25 @@ echo "add hw_decode_tops to examples"
 ${ffmpeg_dir}/doc/example_insert.sh # add hw_decode_tops to examples
 popd
 
-echo "configure FFmpeg"  #    --disable-x86asm \
+echo "configure FFmpeg"  #    
 ./configure \
     --prefix=${build_path}/ffmpeg_gcu \
     --extra-cflags="$_whole_c_flags" \
     --extra-ldflags="$_ldflags" \
     --disable-stripping \
-    --disable-decoders \
     --disable-optimizations \
+    --disable-x86asm \
     --enable-pic \
     --enable-swscale \
     --enable-topscodec \
-    --enable-decoder=vc1 \
     --enable-decoder=vc1_topscodec \
-    --enable-decoder=av1 \
     --enable-decoder=av1_topscodec \
-    --enable-decoder=h264 \
     --enable-decoder=h264_topscodec \
-    --enable-decoder=hevc \
     --enable-decoder=hevc_topscodec \
-    --enable-decoder=vp8 \
     --enable-decoder=vp8_topscodec \
-    --enable-decoder=vp9 \
     --enable-decoder=vp9_topscodec \
-    --enable-decoder=mpeg4 \
     --enable-decoder=mpeg4_topscodec \
-    --enable-decoder=mpeg2video \
     --enable-decoder=mpeg2_topscodec \
-    --enable-decoder=mjpeg \
     --enable-decoder=mjpeg_topscodec \
     --enable-decoder=h263_topscodec \
     --enable-decoder=avs_topscodec \
@@ -268,9 +259,25 @@ cp ${ffmpeg_dir}/doc/examples/hw_decode_multi_tops ${build_path}/ffmpeg_gcu/bin
 
 echo "build ffmpeg gcu done"
 
-
 # Create Debian package
 echo "Creating Debian package"
+
+# 定义需要检查的包列表
+PACKAGES=("build-essential" "devscripts" "debhelper" "dh-make")
+# 检查并安装包
+sudo apt update
+for pkg in "${PACKAGES[@]}"; do
+    # 使用 dpkg-query 检查包是否已安装
+    if dpkg-query -W -f='${Status}' "$pkg" 2>/dev/null | grep -q "ok installed"; then
+        echo "$pkg 已经安装，跳过安装步骤。"
+    else
+        echo "$pkg 未安装，正在安装..."
+        sudo apt install -y "$pkg"
+    fi
+done
+
+# sudo apt update
+# echo y | sudo apt install build-essential devscripts debhelper dh-make
 
 # Define package variables
 PACKAGE_NAME="ffmpeg-gcu"
@@ -280,12 +287,8 @@ PACKAGE_DESCRIPTION="FFmpeg with GCU support"
 PACKAGE_MAINTAINER="zhencheng.cai@enflame-tech.com"
 
 # Create directory structure
-DEB_DIR="${build_path}/deb"
+DEB_DIR="${build_path}/ffmpeg_gcu"
 mkdir -p ${DEB_DIR}/DEBIAN
-mkdir -p ${DEB_DIR}/bin
-mkdir -p ${DEB_DIR}/lib
-mkdir -p ${DEB_DIR}/include
-mkdir -p ${DEB_DIR}/share
 
 # Create control file
 cat <<EOF > ${DEB_DIR}/DEBIAN/control
@@ -297,14 +300,6 @@ Architecture: ${PACKAGE_ARCH}
 Maintainer: ${PACKAGE_MAINTAINER}
 Description: ${PACKAGE_DESCRIPTION}
 EOF
-
-# Copy built files
-cp ${build_path}/ffmpeg_gcu/bin/* ${DEB_DIR}/bin/
-cp ${build_path}/ffmpeg_gcu/lib/* ${DEB_DIR}/lib/
-cp -r ${build_path}/ffmpeg_gcu/include/* ${DEB_DIR}/include/
-cp -r ${build_path}/ffmpeg_gcu/share/* ${DEB_DIR}/share/
-
-rm -rf ${build_path}/ffmpeg_gcu
 
 # Build the package
 dpkg-deb --build ${DEB_DIR} ${DEB_DIR}/${PACKAGE_NAME}_${PACKAGE_VERSION}_tag_${FFMPEG_TAG}_${PACKAGE_ARCH}.deb

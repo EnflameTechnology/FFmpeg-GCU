@@ -30,7 +30,7 @@ make install
 ```
 ./build_ffmpeg.sh -h
 ```
-完成编译后会在当前目录下生成一个build_n4.4的文件夹，其中会生成ffmpeg-gcu_xxx_n4.4_amd64.deb的安装包。
+完成编译后会在当前目录下/ffmpeg-gcu/文件夹下生成一个build_n4.4的文件夹，其中会生成ffmpeg-gcu_xxx_n4.4_amd64.deb的安装包。
 注意上述n4.4可以用其它版本代替。
 
 安装ffmpeg-gcu
