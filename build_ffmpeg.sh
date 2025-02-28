@@ -3,17 +3,10 @@ set -eu -o pipefail
 set +eu +o pipefail
 
 FFMPEG_TAG="n4.4"
-FFMPEG_REPO=${FFMPEG_REPO:-"https://github.com/FFmpeg/FFmpeg.git"}
-# FFMPEG_REPO=${FFMPEG_REPO:-"http://git.enflame.cn/sw/va/FFmpeg.git"} #for debug
+# FFMPEG_REPO=${FFMPEG_REPO:-"https://github.com/FFmpeg/FFmpeg.git"}
+FFMPEG_REPO=${FFMPEG_REPO:-"http://git.enflame.cn/sw/va/FFmpeg.git"} #for debug
 
-cache_tool=""
-no_cache=false
-sysroot=""
-c_compiler="gcc"
-cxx_compiler="g++"
-compiler_ar="ar"
 ffmpeg_dir=""
-build_only=false
 parallel="-j$(nproc)"
 _type="release"
 _pre_c_flags="-g0 -O3 -DNDEBUG"
@@ -25,12 +18,6 @@ usage="Usage: $0 FFMPEG_TAG/n3.2/n4.4/n5.0 [Options]
 
 Options:
     FFMPEG_TAG          FFMPEG git tag. (default $FFMPEG_TAG)
-    -b                  build only
-    -c cache_tool       ccache or sccache
-    -C c-compiler       c compiler
-    -X cxx-compier      cxx compiler
-    -A compiler_ar      compiler ar tool
-    -S sysroot          sysroot
     -s ffmpeg_dir       ffmpeg source code dir,
     -f _c_flags          _c_flags
     -l _ldflags         _ldflags
@@ -39,8 +26,7 @@ Options:
     -h                  help message
 
 exp:
-    1. $0 $FFMPEG_TAG
-    2. $0 -c ccache
+    1. $0 $FFMPEG_TAG -s /path/to/FFmpeg
 "
 
 if [ $# -lt 1 ]; then
@@ -62,31 +48,6 @@ fi
 eval set -- "$OPTIONS"
 while true; do
     case "$1" in
-    -b)
-        build_only=true
-        shift 2
-        ;;
-    -c)
-        # space here is necessary
-        cache_tool="$2 "
-        shift 2
-        ;;
-    -C)
-        c_compiler="$2"
-        shift 2
-        ;;
-    -X)
-        cxx_compiler="$2"
-        shift 2
-        ;;
-    -A)
-        compiler_ar="$2"
-        shift 2
-        ;;
-    -S)
-        sysroot="--sysroot=$2"
-        shift 2
-        ;;
     -s)
         ffmpeg_dir=$(realpath $2)
         shift 2
@@ -134,8 +95,6 @@ while true; do
         ;;
     esac
 done
-
-$no_cache && cache_tool=''
 
 _whole_c_flags="$_pre_c_flags $_c_flags"
 echo "cflags: $_whole_c_flags"
@@ -232,11 +191,6 @@ popd
 echo "configure FFmpeg"  #    --disable-x86asm \
 ./configure \
     --prefix=${build_path}/ffmpeg_gcu \
-    --cc="${cache_tool}$c_compiler" \
-    --cxx="${cache_tool}$cxx_compiler" \
-    --ar="$compiler_ar" \
-    $sysroot \
-    $_arch \
     --extra-cflags="$_whole_c_flags" \
     --extra-ldflags="$_ldflags" \
     --disable-stripping \
@@ -296,10 +250,6 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-if $build_only; then
-    exit 0
-fi
-
 echo "make install"
 make install
 if [ $? -ne 0 ]; then
@@ -332,10 +282,10 @@ PACKAGE_MAINTAINER="zhencheng.cai@enflame-tech.com"
 # Create directory structure
 DEB_DIR="${build_path}/deb"
 mkdir -p ${DEB_DIR}/DEBIAN
-mkdir -p ${DEB_DIR}/usr/local/bin
-mkdir -p ${DEB_DIR}/usr/local/lib
-mkdir -p ${DEB_DIR}/usr/local/include
-mkdir -p ${DEB_DIR}/usr/local/share
+mkdir -p ${DEB_DIR}/bin
+mkdir -p ${DEB_DIR}/lib
+mkdir -p ${DEB_DIR}/include
+mkdir -p ${DEB_DIR}/share
 
 # Create control file
 cat <<EOF > ${DEB_DIR}/DEBIAN/control
@@ -349,10 +299,10 @@ Description: ${PACKAGE_DESCRIPTION}
 EOF
 
 # Copy built files
-cp ${build_path}/ffmpeg_gcu/bin/* ${DEB_DIR}/usr/local/bin/
-cp ${build_path}/ffmpeg_gcu/lib/* ${DEB_DIR}/usr/local/lib/
-cp -r ${build_path}/ffmpeg_gcu/include/* ${DEB_DIR}/usr/local/include/
-cp -r ${build_path}/ffmpeg_gcu/share/* ${DEB_DIR}/usr/local/share/
+cp ${build_path}/ffmpeg_gcu/bin/* ${DEB_DIR}/bin/
+cp ${build_path}/ffmpeg_gcu/lib/* ${DEB_DIR}/lib/
+cp -r ${build_path}/ffmpeg_gcu/include/* ${DEB_DIR}/include/
+cp -r ${build_path}/ffmpeg_gcu/share/* ${DEB_DIR}/share/
 
 rm -rf ${build_path}/ffmpeg_gcu
 

@@ -7,7 +7,7 @@
 
 其中n3.2不包含avs，av1解码器。
 
-## 如何编译？
+## 如何编译ffmpeg？
 
 下载tops-codec-headers项目，在tops-codec-headers文件夹中执行：
 https://github.com/EnflameTechnology/tops-codec-headers
@@ -17,19 +17,160 @@ make install
 ```
 安装topsruntimes以及topscodec相关头文件。
 
-然后再plugin文件夹中执行，
+然后在plugin文件夹中执行，
 ```
 ./build_ffmpeg.sh n4.4
 ```
+如果你已有下载好的ffmpeg源码包，可以之间通过-s参数来指定ffmpeg源码包地址，免得每次都下载，
+```
+./build_ffmpeg.sh n4.4 -s /your/ffmpeg/path
+```
+
 详细的编译选项可以参考
 ```
 ./build_ffmpeg.sh -h
 ```
-完成编译后会生成deb包。
+完成编译后会在当前目录下生成一个build_n4.4的文件夹，其中会生成ffmpeg-gcu_xxx_n4.4_amd64.deb的安装包。
+注意上述n4.4可以用其它版本代替。
 
+安装ffmpeg-gcu
+```
+dpkg -x  ffmpeg-gcu_xxx_n4.4_amd64.deb /your/path
+```
+之后就可以在/your/path/lib,/your/path/bin,/your/path/include下找到安装的相关头文件，库文件了。
 
+## 如何Opencv + ffmpeg 联合编译
 
-## 如何使用？
+如果想要使用OPENCV 调用ffmpeg-gcu，需要根据ffmpeg-gcu库来编译OPENCV，一定要保证环境中没有其它的ffmpeg,如果有，请卸载后再进行下面操作，另外，
+
+1） Opencv和ffmpeg是有版本对应关系，如果你不熟悉其中的关系，默认采用公司提供的ffmpeg-gcu n4.4，支持3.4.2以上的opencv版本。
+
+2）第一次使用，请严格按照下面的教程来编译，运行。下面的流程能保证python调用到你编译的opencv，编译的opencv能调用到ffmpeg-gcu。
+
+3）如何确认Opencv +ffmpeg-gcu跑到topscodec，可以dmesg -C清空kmd log，运行完毕后再dmesg查看是否有gcu codec运行信息即可。
+### 如何快速适配 OpenCV + ffmpeg-gcu
+下面会详细的介绍如何编译适配了ffmpeg-gcu的OpenCV
+
+Opencv 在3.4.2-4.9.0
+
+1.OpenCV的编译需要ffmpeg-gcu，所以需要先安装ffmpeg-gcu，另外必须要把ffmpeg-gcu安装在/usr/local目录下，具体命令如下：
+
+```bash
+ dpkg -x  ffmpeg-gcu_1.2.3.7-20241120-n4.4-1_amd64.deb  /usr/local/
+```
+
+2.下载以及编译OpenCV
+下载OpenCV
+```bash
+git clone https://github.com/opencv/opencv.git
+```
+3.选择自己想要的版本
+```bash
+cd opencv
+git checkout 4.5.2
+```
+
+4.configure,默认会自动去检测是否安装了ffmpeg，默认路径在/usr/local下
+```bash
+cd opencv
+mkdir build
+cd build
+cmake -D OPENCV_GENERATE_PKGCONFIG=YES \
+-D BUILD_opencv_python3.8=yes \
+-D BUILD_opencv_python2=no ..
+```
+执行后，要检查ffmpeg是否被编译进去了,如果编译进去了就能看到下面信息：
+```bash
+--   Video I/O:
+--     DC1394:                      NO
+--     FFMPEG:                      YES
+--       avcodec:                   YES (58.134.100)
+--       avformat:                  YES (58.76.100)
+--       avutil:                    YES (56.70.100)
+--       swscale:                   YES (5.9.100)
+--       avresample:                NO
+--     GStreamer:                   NO
+--     v4l/v4l2:                    YES (linux/videodev2.h)
+```
+如果FFMPEG标记的是NO，要重新检查步骤1是否把ffmpeg-gcu的include,lib,bin安装到了/usr/local下
+
+python3 配置，必须3.8以上，python3.6会出现`AttributeError: module 'cv2.dnn' has no attribute 'DictValue'`错误！
+```bash
+--   Python 3:
+--     Interpreter:                 /usr/bin/python3 (ver 3.8.9)
+--     Libraries:                   /usr/lib/x86_64-linux-gnu/libpython3.6m.so (ver 3.8.9)
+--     numpy:                       /usr/local/lib/python3.8/dist-packages/numpy/core/include (ver 1.19.5)
+--     install path:                lib/python3.6/site-packages/cv2/python-3.6
+```
+
+编译以及安装
+```bash
+make -j4
+make install
+```
+安装后就可以用opencv-python了,其使用路径和编译后安装的路径要一致，可以在make install后找有关python的安装路径，如下找到编译信息
+```bash
+# 
+# -- Up-to-date: /usr/local/include/opencv4/opencv2/gapi/util/variant.hpp
+# -- Up-to-date: /usr/local/include/opencv4/opencv2/gapi/video.hpp
+# -- Installing: /usr/local/lib/python3.8/site-packages/cv2/__init__.py
+# -- Installing: /usr/local/lib/python3.8/site-packages/cv2/load_config_py2.py
+# -- Installing: /usr/local/lib/python3.8/site-packages/cv2/load_config_py3.py
+# -- Installing: /usr/local/lib/python3.8/site-packages/cv2/config.py
+# -- Installing: /usr/local/lib/python3.8/site-packages/cv2/misc/__init__.py
+# -- Installing: /usr/local/lib/python3.8/site-packages/cv2/misc/version.py
+# -- Installing: /usr/local/lib/python3.8/site-packages/cv2/mat_wrapper/__init__.py
+# -- Installing: /usr/local/lib/python3.8/site-packages/cv2/utils/__init__.py
+# -- Installing: /usr/local/lib/python3.8/site-packages/cv2/gapi/__init__.py
+# -- Installing: /usr/local/lib/python3.8/site-packages/cv2/python-3.8/cv2.cpython-38-x86_64-linux-gnu.so
+# -- Set runtime path of "/usr/local/lib/python3.8/site-packages/cv2/python-3.8/cv2.cpython-38-x86_64-linux-gnu.so" to "/usr/local/lib"
+# -- Installing: /usr/local/lib/python3.8/site-packages/cv2/config-3.8.py
+# -- Up-to-date: /usr/local/share/opencv4/haarcascades/haarcascade_eye.xml
+```
+然后找到cv2安装路径，我们这里是/usr/local/lib/python3.8/site-packages/
+```py
+export PYTHONPATH=/usr/local/lib/python3.8/site-packages/
+# 设置后可以查看设置是否生效，如果打印信息和上面的一致/usr/local/lib/python3.8/site-packages/，说明调用到了编译后的opencv
+python3.8
+import cv2
+print(cv2.__file__)
+```
+
+生效后就可以运行下面代码了：
+```py
+
+import os
+import cv2
+
+# 再次检查路径
+print(cv2.__file__)
+
+# print(cv2.getBuildInformation())
+os.environ['OPENCV_FFMPEG_CAPTURE_OPTIONS']="video_codec;h264_topscodec"
+os.environ['OPENCV_FFMPEG_LOGLEVEL']="48"
+os.environ['OPENCV_FFMPEG_DEBUG']="1"
+print(os.getenv('OPENCV_FFMPEG_CAPTURE_OPTIONS'))
+
+cap = cv2.VideoCapture('ocr_400_400_5_frames.mp4')
+
+if not cap.isOpened():
+    print("Error: Could not open video source.")
+else:
+    print("Successfully opened video source.")
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        # cv2.imshow('Frame', frame)
+        print(frame.shape)
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+
+cap.release()
+cv2.destroyAllWindows()
+```
+
+## 如何使用ffmpeg-gcu？
 
 ### GCU 设备的选择
 
