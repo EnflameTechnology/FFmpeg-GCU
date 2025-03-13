@@ -1153,7 +1153,7 @@ static const AVOption options[] = {
      AV_OPT_TYPE_BOOL,
      {.i64 = 1},
      -1,
-     1,
+     0,
      VD},
     {"output_pixfmt",
      "decoder output pixfmt",

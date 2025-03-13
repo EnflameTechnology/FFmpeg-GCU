@@ -293,6 +293,8 @@ FFmpeg 命令行解码的设置（为了防止 ffmpeg 根据 pts 进行抽帧和
 - 使用第 0 张卡上的第 0 个 dev 的 h264_topscodec 解码器，并且使用 online 中的 csc 功能，将 in.bin 解码后的 yuv420p 转换为 Output Pixel 后输出到 out.bin
   - `ffmpeg -hide_banner -v trace -card_id 0 -device_id 0 -output_pixfmt nv12  -output_colorspace bt601 -c:v h264_topscodec -i in.bin -pix_fmt nv12  -c:v rawvideo -vsync 0 out.bin`
 
+需要注意的是，ffmpeg命令行中不允许`-hwaccel topscodec`，因为这会导致解码出来的数据驻留在设备端，导致ffmpeg后面的memcpyH2H失败。
+
 ## FFmpeg C API
 
 下面代码展示了 FFmpeg 调用 topscodec 的关键 api 使用。
