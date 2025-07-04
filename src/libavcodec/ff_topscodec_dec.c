@@ -740,6 +740,8 @@ static av_cold int topscodec_decode_init(AVCodecContext* avctx) {
     EFCodecDecContext_t* ctx = NULL;
     ctx                      = avctx->priv_data;
     ctx->avframe_fifo        = av_fifo_alloc(MAX_FRAME_NUM * sizeof(AVFrame*));
+    av_log(avctx, AV_LOG_DEBUG, "flush fifo queue alloc.\n");
+    av_log(avctx, AV_LOG_DEBUG, "flush fifo queue alloc.\n");
     return topscodec_decode_init_internel(avctx);
 }
 
@@ -810,6 +812,7 @@ static av_cold int topscodec_decode_close(AVCodecContext* avctx) {
     EFCodecDecContext_t* ctx = NULL;
     ctx                      = avctx->priv_data;
     av_fifo_freep(&ctx->avframe_fifo);
+    av_log(avctx, AV_LOG_DEBUG, "flush fifo queue free.\n");
     return topscodec_decode_close_internel(avctx);
 }
 
@@ -1109,7 +1112,7 @@ static void topscodec_flush(struct AVCodecContext* avctx) {
     }
     if (frame) av_frame_free(frame);
 
-    ret = (avctx);
+    ret = topscodec_decode_close_internel(avctx);
     if (ret != 0) goto error;
     ret = topscodec_decode_init_internel(avctx);
     if (ret != 0) goto error;
@@ -1244,9 +1247,9 @@ static void topscodec_flush(struct AVCodecContext* avctx) {
     ctx = (EFCodecDecContext_t*)avctx->priv_data;
     (void)ctx;
 
-    ret = topscodec_decode_close(avctx);
+    ret = topscodec_decode_close_internel(avctx);
     if (ret != 0) goto error;
-    ret = topscodec_decode_init(avctx);
+    ret = topscodec_decode_init_internel(avctx);
     if (ret != 0) goto error;
     av_log(avctx, AV_LOG_DEBUG, "topscodec flush success.\n");
     return;

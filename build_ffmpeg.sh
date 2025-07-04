@@ -195,10 +195,11 @@ echo "configure FFmpeg"  #
     --extra-ldflags="$_ldflags" \
     --disable-stripping \
     --disable-optimizations \
-    --disable-x86asm \
+    --disable-asm \
     --enable-pic \
     --enable-swscale \
     --enable-topscodec \
+    --toolchain=gcc-asan \
     --enable-decoder=vc1_topscodec \
     --enable-decoder=av1_topscodec \
     --enable-decoder=h264_topscodec \
