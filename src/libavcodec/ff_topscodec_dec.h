@@ -21,10 +21,12 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <unistd.h>
-#include "version.h"
+
 #include "avcodec.h"
 #include "ff_topscodec_buffers.h"
+#include "libavutil/fifo.h"
 #include "tops/dynlink_tops_loader.h"
+#include "version.h"
 
 #ifndef AVCODEC_EF_TOPSCODEC_DEC_H
 #define AVCODEC_EF_TOPSCODEC_DEC_H
@@ -70,8 +72,7 @@ typedef struct {
     int progressive;
 
     /* null frame/packet received */
-    int draining;
-
+    int                draining;
     topscodecHandle_t  handle;
     topscodecDecCaps_t caps;
     char*              color_space; /*topscodecColorSpace_t*/
@@ -95,6 +96,8 @@ typedef struct {
     AVFrame*  last_received_frame[MAX_FRAME_NUM];
     int       idx_put;  // for last_received_frame
     int       idx_get;  // for last_received_frame
+
+    AVFifoBuffer* avframe_fifo;  // flush buffer
 
     EFBuffer* ef_buf_frame[MAX_FRAME_NUM];
     EFBuffer* ef_buf_pkt;

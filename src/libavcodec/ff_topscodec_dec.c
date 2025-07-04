@@ -48,15 +48,16 @@
 #include "internal.h"
 #include "libavutil/hwcontext.h"
 #include "libavutil/hwcontext_topscodec.h"
+#include "libavutil/imgutils.h"
 
-#if LIBAVCODEC_VERSION_INT >=  AV_VERSION_INT(59, 27, 100)  // 5.1
+#if LIBAVCODEC_VERSION_INT >= AV_VERSION_INT(59, 27, 100)  // 5.1
 #include "codec_internal.h"
 #include "config_components.h"
 #endif
 
 #if LIBAVCODEC_VERSION_INT >= AV_VERSION_INT(58, 18, 100)  // 4.0
-#include "decode.h"               //3.2 is not support 
-#include "hwconfig.h"             //3.2 is not support 
+#include "decode.h"                                        //3.2 is not support
+#include "hwconfig.h"                                      //3.2 is not support
 #endif
 
 static pthread_mutex_t g_dec_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -167,7 +168,7 @@ static void sleep_wait(int* sleep_handle) {
     }
 }
 
-static int get_card_id_from_env(){
+static int get_card_id_from_env() {
     char* card_id_str = getenv("TOPSCODEC_CARD_ID");
     if (card_id_str == NULL) {
         return 0;
@@ -175,7 +176,7 @@ static int get_card_id_from_env(){
     return atoi(card_id_str);
 }
 
-static int get_device_id_from_env(){
+static int get_device_id_from_env() {
     char* device_id_str = getenv("TOPSCODEC_DEVICE_ID");
     if (device_id_str == NULL) {
         return 0;
@@ -183,7 +184,7 @@ static int get_device_id_from_env(){
     return atoi(device_id_str);
 }
 
-static av_cold int topscodec_decode_init(AVCodecContext* avctx) {
+static int topscodec_decode_init_internel(AVCodecContext* avctx) {
     EFCodecDecContext_t*      ctx          = NULL;
     AVHWFramesContext*        hwframe_ctx  = NULL;
     AVHWDeviceContext*        device_ctx   = NULL;
@@ -195,7 +196,7 @@ static av_cold int topscodec_decode_init(AVCodecContext* avctx) {
     topsError_t              tops_ret              = TOPSCODEC_SUCCESS;
     void*                    tmp                   = NULL;
     char                     card_idx[sizeof(int)] = {0};
-#if LIBAVCODEC_VERSION_INT < AV_VERSION_INT(58, 18, 100) 
+#if LIBAVCODEC_VERSION_INT < AV_VERSION_INT(58, 18, 100)
     AVBSFContext* bsf = NULL;
 #endif
 
@@ -335,7 +336,6 @@ static av_cold int topscodec_decode_init(AVCodecContext* avctx) {
     }
 #endif
     ctx->av_pkt = av_packet_alloc();
-
     pix_fmts[0] = AV_PIX_FMT_TOPSCODEC;
     pix_fmts[1] = AV_PIX_FMT_YUV420P;
     pix_fmts[2] = AV_PIX_FMT_NONE;
@@ -524,10 +524,14 @@ static av_cold int topscodec_decode_init(AVCodecContext* avctx) {
     ctx->draining           = 0;
     ctx->recv_outport_eos   = 0;
     ctx->first_packet       = 1;
+    ctx->idx_get            = 0;
+    ctx->idx_put            = 0;
 
     for (int i = 0; i < MAX_FRAME_NUM; i++) {
         ctx->last_received_frame[i] = av_frame_alloc();
     }
+    // 在flush的时候创建
+    // ctx->avframe_fifo = av_fifo_alloc(MAX_FRAME_NUM * sizeof(AVFrame*));
 
     /*
      * At this moment, if the demuxer does not set this value
@@ -708,7 +712,6 @@ static av_cold int topscodec_decode_init(AVCodecContext* avctx) {
         ret = AVERROR(EINVAL);
         goto error;
     }
-
     ctx->ef_buf_pkt = av_malloc(sizeof(EFBuffer));
     memset(ctx->ef_buf_pkt, 0, sizeof(EFBuffer));
     ctx->ef_buf_pkt->avctx            = avctx;
@@ -733,7 +736,14 @@ error:
     return ret;
 }
 
-static av_cold int topscodec_decode_close(AVCodecContext* avctx) {
+static av_cold int topscodec_decode_init(AVCodecContext* avctx) {
+    EFCodecDecContext_t* ctx = NULL;
+    ctx                      = avctx->priv_data;
+    ctx->avframe_fifo        = av_fifo_alloc(MAX_FRAME_NUM * sizeof(AVFrame*));
+    return topscodec_decode_init_internel(avctx);
+}
+
+static int topscodec_decode_close_internel(AVCodecContext* avctx) {
     EFCodecDecContext_t* ctx;
     if (NULL == avctx || NULL == avctx->priv_data) {
         return AVERROR_BUG;
@@ -790,17 +800,35 @@ static av_cold int topscodec_decode_close(AVCodecContext* avctx) {
             av_frame_free(&ctx->last_received_frame[i]);
         }
     }
+
     ctx->decoder_init_flag = 0;
     av_log(avctx, AV_LOG_DEBUG, "Thread, %lu, decode close \n", (long unsigned)pthread_self());
     return 0;
 }
 
-static int topscodec_recived_helper(AVCodecContext* avctx, AVFrame* avframe, int is_internel) {
+static av_cold int topscodec_decode_close(AVCodecContext* avctx) {
+    EFCodecDecContext_t* ctx = NULL;
+    ctx                      = avctx->priv_data;
+    av_fifo_freep(&ctx->avframe_fifo);
+    return topscodec_decode_close_internel(avctx);
+}
+
+static int topscodec_recived_helper(AVCodecContext* avctx, AVFrame* avframe, int is_internel, int is_flush) {
     int ret = 0;
     int idx = 0;
 
     EFCodecDecContext_t* ctx = (EFCodecDecContext_t*)avctx->priv_data;
     av_frame_unref(avframe);  // fix me
+
+    if (is_flush != 1 && is_internel != 1 && av_fifo_size(ctx->avframe_fifo) > 0) {
+        AVFrame* avframe_tmp;
+        av_fifo_generic_read(ctx->avframe_fifo, &avframe_tmp, sizeof(AVFrame*), NULL);
+        av_log(avctx, AV_LOG_DEBUG, "fifo [%p] Get frame ,size:%d\n", avframe_tmp, av_fifo_size(ctx->avframe_fifo));
+
+        av_frame_ref(avframe, avframe_tmp);
+        av_frame_free(&avframe_tmp);
+        return 0;
+    }
 
     av_log(avctx, AV_LOG_DEBUG, "is_internel:%d, get:%d, put:%d\n", is_internel, ctx->idx_get, ctx->idx_put);
     if (is_internel != 1 && ctx->idx_put != ctx->idx_get) {
@@ -824,7 +852,7 @@ static int topscodec_recived_helper(AVCodecContext* avctx, AVFrame* avframe, int
         print_frame(avctx, &ctx->ef_buf_frame[idx]->ef_frame);
         av_log(avctx, AV_LOG_DEBUG, "topscodecDecFrameMap success\n");
     } else if (TOPSCODEC_ERROR_BUFFER_EMPTY == ret) {
-        av_log(avctx, AV_LOG_DEBUG, "TOPSCODEC_ERROR_BUFFER_EMPTY\n");
+        av_log(avctx, AV_LOG_DEBUG, "TOPSCODEC_ERROR_BUFFER_EMPTY1\n");
         return AVERROR(EAGAIN);
     } else {
         av_log(avctx, AV_LOG_ERROR, "topscodecDecFrameMap failed, ret(%d)\n", ret);
@@ -850,10 +878,17 @@ static int topscodec_recived_helper(AVCodecContext* avctx, AVFrame* avframe, int
         ctx->ef_buf_frame[idx]->ef_context = ctx;
         ret                                = ff_topscodec_efbuf_to_avframe(ctx->ef_buf_frame[idx], &ctx->mid_frame);
         if (ret < 0) return AVERROR_BUG;
-        avframe->format = topspixfmt_2_avpixfmt(ctx->ef_buf_frame[idx]->ef_frame.pixel_format);
-        ret             = av_hwframe_transfer_data(avframe, &ctx->mid_frame, 0);
+        av_frame_copy_props(avframe, &ctx->mid_frame);
+        avframe->format         = ctx->mid_frame.format;
+        avframe->width          = ctx->mid_frame.width;
+        avframe->height         = ctx->mid_frame.height;
+        avframe->channels       = ctx->mid_frame.channels;
+        avframe->channel_layout = ctx->mid_frame.channel_layout;
+        avframe->nb_samples     = ctx->mid_frame.nb_samples;
+
+        ret = av_hwframe_transfer_data(avframe, &ctx->mid_frame, 0);
         if (ret) {
-            av_log(avctx, AV_LOG_ERROR, "av_hwframe_transfer_data failed\n");
+            av_log(avctx, AV_LOG_ERROR, "av_frame_copy failed\n");
             av_frame_unref(&ctx->mid_frame);
             return AVERROR_BUG;
         }
@@ -862,7 +897,7 @@ static int topscodec_recived_helper(AVCodecContext* avctx, AVFrame* avframe, int
     return ret;
 }
 
-#if LIBAVCODEC_VERSION_INT < AV_VERSION_INT(58, 18, 100)
+#if LIBAVCODEC_VERSION_INT < AV_VERSION_INT(58, 18, 100)  // n3.2
 static int topscodec_decode(AVCodecContext* avctx, void* data, int* got_frame, AVPacket* avpkt) {
     EFCodecDecContext_t* ctx             = NULL;
     AVFrame*             frame           = data;
@@ -871,7 +906,6 @@ static int topscodec_decode(AVCodecContext* avctx, void* data, int* got_frame, A
     int                  ret             = 0;
     int                  ret2            = 0;
     int                  sleep_handle    = 0;
-    int                  input_eos       = 0;
 
     if (NULL == avctx || NULL == avctx->priv_data) {
         av_log(avctx, AV_LOG_ERROR, "Early error in topscodec_receive_frame\n");
@@ -913,6 +947,9 @@ static int topscodec_decode(AVCodecContext* avctx, void* data, int* got_frame, A
 
     ctx->ef_buf_pkt->avctx      = avctx;
     ctx->ef_buf_pkt->ef_context = ctx;
+    if (!avpkt->size) {
+        ctx->draining = 1;
+    }
     /*when avpkt.size==0, means eof*/
     av_log(avctx, AV_LOG_DEBUG, "topscodecDecodeStream,pkt_size=%d\n", avpkt->size);
     if (ctx->first_packet) {
@@ -950,7 +987,7 @@ static int topscodec_decode(AVCodecContext* avctx, void* data, int* got_frame, A
                 // last_received_frame array is not full
                 AVFrame* tmp = ctx->last_received_frame[ctx->idx_put];
                 if (ctx->idx_get - ctx->idx_put != 1 && ctx->idx_get - ctx->idx_put != -(MAX_FRAME_NUM - 2)) {
-                    ret2 = topscodec_recived_helper(avctx, tmp, 1);
+                    ret2 = topscodec_recived_helper(avctx, tmp, 1, 0);
                     if (0 == ret2) {
                         ctx->idx_put = (ctx->idx_put + 1) % MAX_FRAME_NUM;
                         av_log(avctx, AV_LOG_DEBUG, "add frame to queue,put:%d,get:%d!\n", ctx->idx_put, ctx->idx_get);
@@ -974,15 +1011,12 @@ static int topscodec_decode(AVCodecContext* avctx, void* data, int* got_frame, A
         }
     } while (ret == TOPSCODEC_ERROR_TIMEOUT);
 
-    if (!avpkt->size) {
-        ctx->draining = 1;
-        input_eos     = 1;
-    }
     av_packet_unref(avpkt);
 recv:
-    ret = topscodec_recived_helper(avctx, frame, 0);
-    if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
-        if (input_eos) {
+    ret = topscodec_recived_helper(avctx, frame, 0, 0);
+    if (ret == AVERROR(EAGAIN)) {
+        if (ctx->draining) {
+            av_log(avctx, AV_LOG_DEBUG, "repeating ,ret:%d\n", ret);
             goto recv;
         } else {
             *got_frame = 0;
@@ -991,16 +1025,103 @@ recv:
         return ret;
     } else {
         *got_frame = 1;
-        av_log(avctx, AV_LOG_DEBUG, "topscodec got_frame, got_frame:%d\n", *got_frame);
+        av_log(avctx, AV_LOG_DEBUG, "topscodec got_frame, got_frame:%d,ret:%d\n", *got_frame, ret);
     }
     return ret;
 fail:
     av_log(avctx, AV_LOG_DEBUG, "topscodec_receive_frame,fail.\n");
     return AVERROR_BUG;
 }
-#endif
 
-#if LIBAVCODEC_VERSION_INT >= AV_VERSION_INT(58, 100, 100) //n4.0
+static void topscodec_flush(struct AVCodecContext* avctx) {
+    EFCodecDecContext_t*   ctx;
+    TopsRuntimesFunctions* topsruntime = NULL;
+    int                    ret;
+    int                    planes;
+    size_t                 planesizes[AV_NUM_DATA_POINTERS] = {0};
+    int                    linesizes[AV_NUM_DATA_POINTERS]  = {0};
+    ptrdiff_t              linesizes1[AV_NUM_DATA_POINTERS] = {0};
+
+    av_log(avctx, AV_LOG_DEBUG, "topscodec flush begin...\n");
+    if (NULL == avctx || NULL == avctx->priv_data) {
+        av_log(avctx, AV_LOG_ERROR, "Early error in topscodec_receive_frame\n");
+    }
+    ctx         = (EFCodecDecContext_t*)avctx->priv_data;
+    topsruntime = ctx->topsruntime_lib_ctx;
+
+    AVFrame* frame = av_frame_alloc();
+    while (!ctx->recv_outport_eos) {
+        ret = topscodec_recived_helper(avctx, frame, 0, 1);
+        if (ret == AVERROR(EAGAIN)) {
+            continue;
+        } else if (ret == AVERROR_EOF) {
+            break;
+        }
+        if (av_fifo_space(ctx->avframe_fifo) < sizeof(AVFrame*)) {
+            av_fifo_grow(ctx->avframe_fifo, 5 * sizeof(AVFrame*));
+            av_log(avctx, AV_LOG_DEBUG, "fifo grow success, size:%d.\n", av_fifo_size(ctx->avframe_fifo));
+        }
+        planes = av_pix_fmt_count_planes(frame->format);
+        ret    = av_image_fill_linesizes(linesizes, frame->format, frame->width);
+        if (ret < 0) {
+            av_log(avctx, AV_LOG_ERROR, "av_image_fill_linesizes failed.\n");
+            goto error;
+        }
+        for (int i = 0; i < AV_NUM_DATA_POINTERS; i++) linesizes1[i] = linesizes[i];
+        // capture one frame
+        ret = av_image_fill_plane_sizes(planesizes, frame->format, frame->height, linesizes1);
+        if (ret < 0) {
+            av_log(avctx, AV_LOG_ERROR, "av_image_fill_plane_sizes failed.\n");
+            goto error;
+        }
+
+        AVFrame* fifo_avframe = av_frame_alloc();
+        av_frame_copy_props(fifo_avframe, frame);
+        fifo_avframe->format         = frame->format;
+        fifo_avframe->width          = frame->width;
+        fifo_avframe->height         = frame->height;
+        fifo_avframe->channels       = frame->channels;
+        fifo_avframe->channel_layout = frame->channel_layout;
+        fifo_avframe->nb_samples     = frame->nb_samples;
+
+        if (avctx->pix_fmt == AV_PIX_FMT_TOPSCODEC) {
+            // D2D
+            av_hwframe_get_buffer(avctx->hw_frames_ctx, fifo_avframe, 0);
+            for (int i = 0; i < planes; i++) {
+                fifo_avframe->linesize[i] = frame->linesize[i];
+                ret = topsruntime->lib_topsMemcpyDtoD(fifo_avframe->data[i], frame->data[i], planesizes[i]);
+                if (ret != topsSuccess) {
+                    av_log(avctx, AV_LOG_ERROR, "flush d2x: dev %p -> dev 0x%p, size %lu\n", frame->data[i],
+                           fifo_avframe->data[i], planesizes[i]);
+                    goto error;
+                }
+                av_log(avctx, AV_LOG_DEBUG, "flush d2x: dev %p -> dev 0x%p, size %lu\n", frame->data[i],
+                       fifo_avframe->data[i], planesizes[i]);
+            }
+
+        } else {
+            av_frame_ref(fifo_avframe, frame);
+        }
+        av_fifo_generic_write(ctx->avframe_fifo, &fifo_avframe, sizeof(AVFrame*), NULL);
+        av_log(avctx, AV_LOG_DEBUG, "fifo [%p] write success, size:%d.\n", fifo_avframe,
+               av_fifo_size(ctx->avframe_fifo));
+        av_frame_unref(frame);
+    }
+    if (frame) av_frame_free(frame);
+
+    ret = (avctx);
+    if (ret != 0) goto error;
+    ret = topscodec_decode_init_internel(avctx);
+    if (ret != 0) goto error;
+    av_log(avctx, AV_LOG_DEBUG, "topscodec flush success.\n");
+    return;
+error:
+    if (frame) av_frame_free(frame);
+    av_log(avctx, AV_LOG_ERROR, "CUDA reinit on flush failed\n");
+}
+#endif  // n3.2
+
+#if LIBAVCODEC_VERSION_INT >= AV_VERSION_INT(58, 100, 100)  // n4.0
 static int topscodec_receive_frame(AVCodecContext* avctx, AVFrame* frame) {
     EFCodecDecContext_t* ctx;
     int                  ret, ret2;
@@ -1025,7 +1146,7 @@ static int topscodec_receive_frame(AVCodecContext* avctx, AVFrame* frame) {
         ret = ff_decode_get_packet(avctx, ctx->av_pkt);
         if (ret < 0) {
             if (ret == AVERROR(EAGAIN)) {
-                return topscodec_recived_helper(avctx, frame, 0);
+                return topscodec_recived_helper(avctx, frame, 0, 0);
             } else if (ret != AVERROR_EOF) {
                 return ret;
             }
@@ -1076,7 +1197,7 @@ static int topscodec_receive_frame(AVCodecContext* avctx, AVFrame* frame) {
                 // last_received_frame array is not full
                 AVFrame* tmp = ctx->last_received_frame[ctx->idx_put];
                 if (ctx->idx_get - ctx->idx_put != 1 && ctx->idx_get - ctx->idx_put != -(MAX_FRAME_NUM - 2)) {
-                    ret2 = topscodec_recived_helper(avctx, tmp, 1);
+                    ret2 = topscodec_recived_helper(avctx, tmp, 1, 0);
                     if (0 == ret2) {
                         ctx->idx_put = (ctx->idx_put + 1) % MAX_FRAME_NUM;
                         av_log(avctx, AV_LOG_DEBUG, "add frame to queue,put:%d,get:%d!\n", ctx->idx_put, ctx->idx_get);
@@ -1106,18 +1227,33 @@ static int topscodec_receive_frame(AVCodecContext* avctx, AVFrame* frame) {
     av_packet_unref(ctx->av_pkt);
 
 dequeue:
-    return topscodec_recived_helper(avctx, frame, 0);
+    return topscodec_recived_helper(avctx, frame, 0, 0);
 
 fail:
     av_log(avctx, AV_LOG_DEBUG, "topscodec_receive_frame,fail.\n");
     return AVERROR_BUG;
 }
-#else
-static int topscodec_receive_frame(AVCodecContext* avctx, AVFrame* frame) {
-    av_log(avctx, AV_LOG_DEBUG, "topscodec_recived_helper===>\n");
-    return topscodec_recived_helper(avctx, frame, 0);
+
+static void topscodec_flush(struct AVCodecContext* avctx) {
+    EFCodecDecContext_t* ctx;
+    int                  ret;
+    av_log(avctx, AV_LOG_DEBUG, "topscodec flush begin...\n");
+    if (NULL == avctx || NULL == avctx->priv_data) {
+        av_log(avctx, AV_LOG_ERROR, "Early error in topscodec_flush\n");
+    }
+    ctx = (EFCodecDecContext_t*)avctx->priv_data;
+    (void)ctx;
+
+    ret = topscodec_decode_close(avctx);
+    if (ret != 0) goto error;
+    ret = topscodec_decode_init(avctx);
+    if (ret != 0) goto error;
+    av_log(avctx, AV_LOG_DEBUG, "topscodec flush success.\n");
+    return;
+error:
+    av_log(avctx, AV_LOG_ERROR, "CUDA reinit on flush failed\n");
 }
-#endif
+#endif  // n4.4
 
 #define OFFSET(x) offsetof(EFCodecDecContext_t, x)
 #define VD AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_DECODING_PARAM
@@ -1152,8 +1288,8 @@ static const AVOption options[] = {
      OFFSET(zero_copy),
      AV_OPT_TYPE_BOOL,
      {.i64 = 1},
-     -1,
      0,
+     INT_MAX,
      VD},
     {"output_pixfmt",
      "decoder output pixfmt",
@@ -1209,7 +1345,6 @@ static const AVOption options[] = {
     {NULL},
 };
 
-
 #if LIBAVCODEC_VERSION_INT >= AV_VERSION_INT(58, 18, 100)
 static const AVCodecHWConfigInternal* topscodec_hw_configs[] = {
     &(const AVCodecHWConfigInternal){
@@ -1229,7 +1364,7 @@ static const AVCodecHWConfigInternal* topscodec_hw_configs[] = {
         .version    = LIBAVUTIL_VERSION_INT,              \
     };
 
-#if LIBAVCODEC_VERSION_INT < AV_VERSION_INT(58, 18, 100) //n3.x
+#if LIBAVCODEC_VERSION_INT < AV_VERSION_INT(58, 18, 100)  // n3.x
 #define TOPSCODECDEC(NAME, LONGNAME, CODEC, BSF_NAME)                                                                \
     TOPSCODEC_CLASS(NAME)                                                                                            \
     AVHWAccel ff_##NAME##_topscodec_hwaccel = {                                                                      \
@@ -1247,6 +1382,7 @@ static const AVCodecHWConfigInternal* topscodec_hw_configs[] = {
         .priv_class     = &topscodec_##NAME##_dec_class,                                                             \
         .init           = topscodec_decode_init,                                                                     \
         .decode         = topscodec_decode,                                                                          \
+        .flush          = topscodec_flush,                                                                           \
         .close          = topscodec_decode_close,                                                                    \
         .capabilities   = AV_CODEC_CAP_DELAY | AV_CODEC_CAP_AVOID_PROBING,                                           \
         .caps_internal  = FF_CODEC_CAP_SETS_PKT_DTS | FF_CODEC_CAP_INIT_CLEANUP,                                     \
@@ -1257,7 +1393,7 @@ static const AVCodecHWConfigInternal* topscodec_hw_configs[] = {
                                          AV_PIX_FMT_P010LE, AV_PIX_FMT_GRAY8, AV_PIX_FMT_NONE},                      \
     }
 
-#elif LIBAVCODEC_VERSION_INT <= AV_VERSION_INT(59, 18, 100) // n4.x
+#elif LIBAVCODEC_VERSION_INT <= AV_VERSION_INT(59, 18, 100)  // n4.x
 #define TOPSCODECDEC(NAME, LONGNAME, CODEC, BSF_NAME)                                                                \
     TOPSCODEC_CLASS(NAME)                                                                                            \
     const AVCodec ff_##NAME##_topscodec_decoder = {                                                                  \
@@ -1270,6 +1406,7 @@ static const AVCodecHWConfigInternal* topscodec_hw_configs[] = {
         .init           = topscodec_decode_init,                                                                     \
         .receive_frame  = topscodec_receive_frame,                                                                   \
         .close          = topscodec_decode_close,                                                                    \
+        .flush          = topscodec_flush,                                                                           \
         .bsfs           = BSF_NAME,                                                                                  \
         .capabilities   = AV_CODEC_CAP_DELAY | AV_CODEC_CAP_HARDWARE | AV_CODEC_CAP_AVOID_PROBING,                   \
         .caps_internal  = FF_CODEC_CAP_SETS_PKT_DTS | FF_CODEC_CAP_INIT_CLEANUP,                                     \

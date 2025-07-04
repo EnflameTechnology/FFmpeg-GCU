@@ -75,8 +75,7 @@ static enum AVPictureType tops_2_av_pic_type(topscodecPicType_t type) {
 }
 
 static int key_frame(topscodecPicType_t type) {
-    if (type == TOPSCODEC_PIC_TYPE_IDR)
-        return 1;
+    if (type == TOPSCODEC_PIC_TYPE_IDR) return 1;
     return 0;
 }
 
@@ -216,7 +215,7 @@ int ff_topscodec_efbuf_to_avframe(const EFBuffer* efbuf, AVFrame* avframe) {
     log_ctx->height      = efbuf->ef_frame.height;
     log_ctx->width       = efbuf->ef_frame.width;
 
-    avframe->format = topspixfmt_2_avpixfmt(efbuf->ef_frame.pixel_format);
+    avframe->format    = topspixfmt_2_avpixfmt(efbuf->ef_frame.pixel_format);
     avframe->pict_type = tops_2_av_pic_type(efbuf->ef_frame.pic_type);
     av_log(log_ctx, AV_LOG_DEBUG, "pic_type:%d\n", efbuf->ef_frame.pic_type);
     avframe->key_frame = key_frame(efbuf->ef_frame.pic_type);
@@ -226,7 +225,7 @@ int ff_topscodec_efbuf_to_avframe(const EFBuffer* efbuf, AVFrame* avframe) {
     if (!ctx->zero_copy) { /*Not support yet*/
         ret = av_image_fill_linesizes(linesizes, avframe->format, avframe->width);
         if (ret < 0) {
-            av_log(log_ctx, AV_LOG_ERROR, "av_image_fill_plane_sizes failed.\n");
+            av_log(log_ctx, AV_LOG_ERROR, "av_image_fill_linesizes failed.\n");
             return AVERROR_BUG;
         }
 
@@ -275,7 +274,7 @@ int ff_topscodec_efbuf_to_avframe(const EFBuffer* efbuf, AVFrame* avframe) {
             av_assert0(avframe->data[i]);
             ret = topsruntime->lib_topsMemcpyDtoD(avframe->data[i], data[i], planesizes[i]);
             if (ret != topsSuccess) {
-                av_log(ctx, AV_LOG_ERROR, "d2x: host %p -> dev 0x%p, size %lu\n", data[i], (void*)avframe->data[i],
+                av_log(ctx, AV_LOG_ERROR, "d2x: dev %p -> dev 0x%p, size %lu\n", data[i], (void*)avframe->data[i],
                        planesizes[i]);
                 av_log(ctx, AV_LOG_ERROR,
                        "topsMemcpyDtoD error occur, func: %s, "
@@ -284,7 +283,7 @@ int ff_topscodec_efbuf_to_avframe(const EFBuffer* efbuf, AVFrame* avframe) {
                 av_frame_unref(avframe);
                 return AVERROR_BUG;
             }
-            av_log(log_ctx, AV_LOG_DEBUG, "d2d: host %p -> dev %p, size %lu\n", data[i], avframe->data[i],
+            av_log(log_ctx, AV_LOG_DEBUG, "d2d: dev %p -> dev %p, size %lu\n", data[i], avframe->data[i],
                    planesizes[i]);
         }  // for
         ret = topscodec->lib_topscodecDecFrameUnmap(ctx->handle, &efbuf->ef_frame);
@@ -302,8 +301,8 @@ int ff_topscodec_efbuf_to_avframe(const EFBuffer* efbuf, AVFrame* avframe) {
             avframe->linesize[i] = efbuf->ef_frame.plane[i].stride;
             avframe->data[i]     = avframe->buf[i]->data;
         }
-        avframe->hw_frames_ctx = av_buffer_ref(log_ctx->hw_frames_ctx);
     }
+    avframe->hw_frames_ctx = av_buffer_ref(log_ctx->hw_frames_ctx);
 
     /* 2. get avframe information */
     avframe->key_frame = 0;

@@ -887,7 +887,7 @@ int main(int argc, char* argv[]) {
     }
 
     g_is_av1 = 0;
-#if LIBAVCODEC_VERSION_INT >=  AV_VERSION_INT(58, 18, 100)
+#if LIBAVCODEC_VERSION_INT >= AV_VERSION_INT(58, 18, 100)
     // if (end_with(g_in_file, ".av1") || end_with(g_in_file, ".AV1")) {
     if (codec_id == AV_CODEC_ID_AV1) {
         g_is_av1 = 1;

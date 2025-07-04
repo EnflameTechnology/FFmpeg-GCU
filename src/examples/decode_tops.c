@@ -142,7 +142,7 @@ static int init_decode(const char* in_file, const char* out_file, const char* de
         case AV_CODEC_ID_CAVS:
             p_codec = avcodec_find_decoder_by_name("avs_topscodec");
             break;
-#if LIBAVCODEC_VERSION_INT >=  AV_VERSION_INT(58, 18, 100)
+#if LIBAVCODEC_VERSION_INT >= AV_VERSION_INT(58, 18, 100)
         case AV_CODEC_ID_AVS2:
             p_codec = avcodec_find_decoder_by_name("avs2_topscodec");
             break;
