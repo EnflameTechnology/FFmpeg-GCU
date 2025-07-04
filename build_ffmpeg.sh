@@ -188,18 +188,17 @@ echo "add hw_decode_tops to examples"
 ${ffmpeg_dir}/doc/example_insert.sh # add hw_decode_tops to examples
 popd
 
-echo "configure FFmpeg"  #    
+echo "configure FFmpeg"  #    --toolchain=gcc-asan \
 ./configure \
     --prefix=${build_path}/ffmpeg_gcu \
     --extra-cflags="$_whole_c_flags" \
     --extra-ldflags="$_ldflags" \
     --disable-stripping \
     --disable-optimizations \
-    --disable-asm \
+    --disable-x86asm \
     --enable-pic \
     --enable-swscale \
     --enable-topscodec \
-    --toolchain=gcc-asan \
     --enable-decoder=vc1_topscodec \
     --enable-decoder=av1_topscodec \
     --enable-decoder=h264_topscodec \
