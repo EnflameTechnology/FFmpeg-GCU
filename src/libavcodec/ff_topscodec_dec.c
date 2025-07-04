@@ -1117,7 +1117,7 @@ static void topscodec_flush(struct AVCodecContext* avctx) {
     return;
 error:
     if (frame) av_frame_free(frame);
-    av_log(avctx, AV_LOG_ERROR, "CUDA reinit on flush failed\n");
+    av_log(avctx, AV_LOG_ERROR, "GCU codec reinit on flush failed\n");
 }
 #endif  // n3.2
 
@@ -1251,7 +1251,7 @@ static void topscodec_flush(struct AVCodecContext* avctx) {
     av_log(avctx, AV_LOG_DEBUG, "topscodec flush success.\n");
     return;
 error:
-    av_log(avctx, AV_LOG_ERROR, "CUDA reinit on flush failed\n");
+    av_log(avctx, AV_LOG_ERROR, "GCU codec reinit on flush failed\n");
 }
 #endif  // n4.4
 
