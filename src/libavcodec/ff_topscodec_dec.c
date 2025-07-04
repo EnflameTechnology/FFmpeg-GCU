@@ -1110,7 +1110,7 @@ static void topscodec_flush(struct AVCodecContext* avctx) {
                av_fifo_size(ctx->avframe_fifo));
         av_frame_unref(frame);
     }
-    if (frame) av_frame_free(frame);
+    if (frame) av_frame_free(&frame);
 
     ret = topscodec_decode_close_internel(avctx);
     if (ret != 0) goto error;
@@ -1119,7 +1119,7 @@ static void topscodec_flush(struct AVCodecContext* avctx) {
     av_log(avctx, AV_LOG_DEBUG, "topscodec flush success.\n");
     return;
 error:
-    if (frame) av_frame_free(frame);
+    if (frame) av_frame_free(&frame);
     av_log(avctx, AV_LOG_ERROR, "GCU codec reinit on flush failed\n");
 }
 #endif  // n3.2

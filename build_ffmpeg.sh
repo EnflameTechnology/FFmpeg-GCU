@@ -188,7 +188,7 @@ echo "add hw_decode_tops to examples"
 ${ffmpeg_dir}/doc/example_insert.sh # add hw_decode_tops to examples
 popd
 
-echo "configure FFmpeg"  #    --toolchain=gcc-asan \
+echo "configure FFmpeg"  #--toolchain=gcc-asan \   
 ./configure \
     --prefix=${build_path}/ffmpeg_gcu \
     --extra-cflags="$_whole_c_flags" \
