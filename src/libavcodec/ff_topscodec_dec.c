@@ -1283,7 +1283,7 @@ static const AVOption options[] = {
     {"hw_id", "use to choose the accelerator id", OFFSET(hw_id), AV_OPT_TYPE_INT, {.i64 = 15}, 0, 100, VD},
     {"in_w", "video width", OFFSET(in_width), AV_OPT_TYPE_INT, {.i64 = 0}, 0, INT_MAX, VD},
     {"in_h", "video height", OFFSET(in_height), AV_OPT_TYPE_INT, {.i64 = 0}, 0, INT_MAX, VD},
-    {"sf", "use to choose the switch ratio", OFFSET(sf), AV_OPT_TYPE_INT, {.i64 = 0}, 0, 500, VD},
+    {"sf", "use to choose the switch ratio", OFFSET(sf), AV_OPT_TYPE_INT, {.i64 = 1}, 0, 500, VD},
     {"out_port_num", "decode outport buf num", OFFSET(output_buf_num), AV_OPT_TYPE_INT, {.i64 = 8}, 0, 100, VD},
     {"in_port_num", "decode inport buf num", OFFSET(input_buf_num), AV_OPT_TYPE_INT, {.i64 = 8}, 0, 100, VD},
     {"zero_copy",
