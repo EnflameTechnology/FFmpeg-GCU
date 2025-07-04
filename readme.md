@@ -7,6 +7,8 @@
 
 其中n3.2不包含avs，av1解码器。
 
+VPU硬件没有显示的flush操作，底层VPU硬件遇到IDR帧自动flush，为了兼容ffmpeg中flush，默认flush采用销毁decoder，重新创建decoder的方式。
+
 ## 如何编译ffmpeg？
 
 下载tops-codec-headers项目，在tops-codec-headers文件夹中执行：
