@@ -1036,92 +1036,6 @@ fail:
     return AVERROR_BUG;
 }
 
-static void topscodec_flush(struct AVCodecContext* avctx) {
-    EFCodecDecContext_t*   ctx;
-    TopsRuntimesFunctions* topsruntime = NULL;
-    int                    ret;
-    int                    planes;
-    size_t                 planesizes[AV_NUM_DATA_POINTERS] = {0};
-    int                    linesizes[AV_NUM_DATA_POINTERS]  = {0};
-    ptrdiff_t              linesizes1[AV_NUM_DATA_POINTERS] = {0};
-
-    av_log(avctx, AV_LOG_DEBUG, "topscodec flush begin...\n");
-    if (NULL == avctx || NULL == avctx->priv_data) {
-        av_log(avctx, AV_LOG_ERROR, "Early error in topscodec_receive_frame\n");
-    }
-    ctx         = (EFCodecDecContext_t*)avctx->priv_data;
-    topsruntime = ctx->topsruntime_lib_ctx;
-
-    AVFrame* frame = av_frame_alloc();
-    while (!ctx->recv_outport_eos) {
-        ret = topscodec_recived_helper(avctx, frame, 0, 1);
-        if (ret == AVERROR(EAGAIN)) {
-            continue;
-        } else if (ret == AVERROR_EOF) {
-            break;
-        }
-        if (av_fifo_space(ctx->avframe_fifo) < sizeof(AVFrame*)) {
-            av_fifo_grow(ctx->avframe_fifo, 5 * sizeof(AVFrame*));
-            av_log(avctx, AV_LOG_DEBUG, "fifo grow success, size:%d.\n", av_fifo_size(ctx->avframe_fifo));
-        }
-        planes = av_pix_fmt_count_planes(frame->format);
-        ret    = av_image_fill_linesizes(linesizes, frame->format, frame->width);
-        if (ret < 0) {
-            av_log(avctx, AV_LOG_ERROR, "av_image_fill_linesizes failed.\n");
-            goto error;
-        }
-        for (int i = 0; i < AV_NUM_DATA_POINTERS; i++) linesizes1[i] = linesizes[i];
-        // capture one frame
-        ret = av_image_fill_plane_sizes(planesizes, frame->format, frame->height, linesizes1);
-        if (ret < 0) {
-            av_log(avctx, AV_LOG_ERROR, "av_image_fill_plane_sizes failed.\n");
-            goto error;
-        }
-
-        AVFrame* fifo_avframe = av_frame_alloc();
-        av_frame_copy_props(fifo_avframe, frame);
-        fifo_avframe->format         = frame->format;
-        fifo_avframe->width          = frame->width;
-        fifo_avframe->height         = frame->height;
-        fifo_avframe->channels       = frame->channels;
-        fifo_avframe->channel_layout = frame->channel_layout;
-        fifo_avframe->nb_samples     = frame->nb_samples;
-
-        if (avctx->pix_fmt == AV_PIX_FMT_TOPSCODEC) {
-            // D2D
-            av_hwframe_get_buffer(avctx->hw_frames_ctx, fifo_avframe, 0);
-            for (int i = 0; i < planes; i++) {
-                fifo_avframe->linesize[i] = frame->linesize[i];
-                ret = topsruntime->lib_topsMemcpyDtoD(fifo_avframe->data[i], frame->data[i], planesizes[i]);
-                if (ret != topsSuccess) {
-                    av_log(avctx, AV_LOG_ERROR, "flush d2x: dev %p -> dev 0x%p, size %lu\n", frame->data[i],
-                           fifo_avframe->data[i], planesizes[i]);
-                    goto error;
-                }
-                av_log(avctx, AV_LOG_DEBUG, "flush d2x: dev %p -> dev 0x%p, size %lu\n", frame->data[i],
-                       fifo_avframe->data[i], planesizes[i]);
-            }
-
-        } else {
-            av_frame_ref(fifo_avframe, frame);
-        }
-        av_fifo_generic_write(ctx->avframe_fifo, &fifo_avframe, sizeof(AVFrame*), NULL);
-        av_log(avctx, AV_LOG_DEBUG, "fifo [%p] write success, size:%d.\n", fifo_avframe,
-               av_fifo_size(ctx->avframe_fifo));
-        av_frame_unref(frame);
-    }
-    if (frame) av_frame_free(&frame);
-
-    ret = topscodec_decode_close_internel(avctx);
-    if (ret != 0) goto error;
-    ret = topscodec_decode_init_internel(avctx);
-    if (ret != 0) goto error;
-    av_log(avctx, AV_LOG_DEBUG, "topscodec flush success.\n");
-    return;
-error:
-    if (frame) av_frame_free(&frame);
-    av_log(avctx, AV_LOG_ERROR, "GCU codec reinit on flush failed\n");
-}
 #endif  // n3.2
 
 #if LIBAVCODEC_VERSION_INT >= AV_VERSION_INT(58, 100, 100)  // n4.0
@@ -1237,15 +1151,83 @@ fail:
     return AVERROR_BUG;
 }
 
+#endif  // n4.4
+
 static void topscodec_flush(struct AVCodecContext* avctx) {
-    EFCodecDecContext_t* ctx;
-    int                  ret;
+    EFCodecDecContext_t*   ctx;
+    TopsRuntimesFunctions* topsruntime = NULL;
+    int                    ret;
+    int                    planes;
+    size_t                 planesizes[AV_NUM_DATA_POINTERS] = {0};
+    int                    linesizes[AV_NUM_DATA_POINTERS]  = {0};
+    ptrdiff_t              linesizes1[AV_NUM_DATA_POINTERS] = {0};
+
     av_log(avctx, AV_LOG_DEBUG, "topscodec flush begin...\n");
     if (NULL == avctx || NULL == avctx->priv_data) {
-        av_log(avctx, AV_LOG_ERROR, "Early error in topscodec_flush\n");
+        av_log(avctx, AV_LOG_ERROR, "Early error in topscodec_receive_frame\n");
     }
-    ctx = (EFCodecDecContext_t*)avctx->priv_data;
-    (void)ctx;
+    ctx         = (EFCodecDecContext_t*)avctx->priv_data;
+    topsruntime = ctx->topsruntime_lib_ctx;
+
+    AVFrame* frame = av_frame_alloc();
+    while (!ctx->recv_outport_eos) {
+        ret = topscodec_recived_helper(avctx, frame, 0, 1);
+        if (ret == AVERROR(EAGAIN)) {
+            continue;
+        } else if (ret == AVERROR_EOF) {
+            break;
+        }
+        if (av_fifo_space(ctx->avframe_fifo) < sizeof(AVFrame*)) {
+            av_fifo_grow(ctx->avframe_fifo, 5 * sizeof(AVFrame*));
+            av_log(avctx, AV_LOG_DEBUG, "fifo grow success, size:%d.\n", av_fifo_size(ctx->avframe_fifo));
+        }
+        planes = av_pix_fmt_count_planes(frame->format);
+        ret    = av_image_fill_linesizes(linesizes, frame->format, frame->width);
+        if (ret < 0) {
+            av_log(avctx, AV_LOG_ERROR, "av_image_fill_linesizes failed.\n");
+            goto error;
+        }
+        for (int i = 0; i < AV_NUM_DATA_POINTERS; i++) linesizes1[i] = linesizes[i];
+        // capture one frame
+        ret = av_image_fill_plane_sizes(planesizes, frame->format, frame->height, linesizes1);
+        if (ret < 0) {
+            av_log(avctx, AV_LOG_ERROR, "av_image_fill_plane_sizes failed.\n");
+            goto error;
+        }
+
+        AVFrame* fifo_avframe = av_frame_alloc();
+        av_frame_copy_props(fifo_avframe, frame);
+        fifo_avframe->format         = frame->format;
+        fifo_avframe->width          = frame->width;
+        fifo_avframe->height         = frame->height;
+        fifo_avframe->channels       = frame->channels;
+        fifo_avframe->channel_layout = frame->channel_layout;
+        fifo_avframe->nb_samples     = frame->nb_samples;
+
+        if (avctx->pix_fmt == AV_PIX_FMT_TOPSCODEC) {
+            // D2D
+            av_hwframe_get_buffer(avctx->hw_frames_ctx, fifo_avframe, 0);
+            for (int i = 0; i < planes; i++) {
+                fifo_avframe->linesize[i] = frame->linesize[i];
+                ret = topsruntime->lib_topsMemcpyDtoD(fifo_avframe->data[i], frame->data[i], planesizes[i]);
+                if (ret != topsSuccess) {
+                    av_log(avctx, AV_LOG_ERROR, "flush d2x: dev %p -> dev 0x%p, size %lu\n", frame->data[i],
+                           fifo_avframe->data[i], planesizes[i]);
+                    goto error;
+                }
+                av_log(avctx, AV_LOG_DEBUG, "flush d2x: dev %p -> dev 0x%p, size %lu\n", frame->data[i],
+                       fifo_avframe->data[i], planesizes[i]);
+            }
+
+        } else {
+            av_frame_ref(fifo_avframe, frame);
+        }
+        av_fifo_generic_write(ctx->avframe_fifo, &fifo_avframe, sizeof(AVFrame*), NULL);
+        av_log(avctx, AV_LOG_DEBUG, "fifo [%p] write success, size:%d.\n", fifo_avframe,
+               av_fifo_size(ctx->avframe_fifo));
+        av_frame_unref(frame);
+    }
+    if (frame) av_frame_free(&frame);
 
     ret = topscodec_decode_close_internel(avctx);
     if (ret != 0) goto error;
@@ -1254,9 +1236,9 @@ static void topscodec_flush(struct AVCodecContext* avctx) {
     av_log(avctx, AV_LOG_DEBUG, "topscodec flush success.\n");
     return;
 error:
+    if (frame) av_frame_free(&frame);
     av_log(avctx, AV_LOG_ERROR, "GCU codec reinit on flush failed\n");
 }
-#endif  // n4.4
 
 #define OFFSET(x) offsetof(EFCodecDecContext_t, x)
 #define VD AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_DECODING_PARAM
