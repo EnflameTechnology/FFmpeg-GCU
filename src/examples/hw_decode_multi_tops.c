@@ -396,7 +396,6 @@ static int decode_write(job_args_t* job, FILE* outfile, AVCodecContext* avctx, A
         }
 
     fail:
-        av_buffer_unref(&frame->hw_frames_ctx);
         av_frame_free(&frame);
         av_frame_free(&sw_frame);
         av_freep(&buffer);
@@ -620,7 +619,7 @@ static void* job_thread(void* arg) {
     if (g_sync) synchoronize(SYNC_END);
     av_log(avctx, AV_LOG_INFO, "decode finish, frames:%d\n", job->frames);
 
-    av_buffer_unref(&hw_device_ctx);
+    // av_buffer_unref(&hw_device_ctx);
     avcodec_free_context(&avctx);
     avformat_close_input(&input_ctx);
 

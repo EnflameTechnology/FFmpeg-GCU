@@ -301,9 +301,9 @@ int ff_topscodec_efbuf_to_avframe(const EFBuffer* efbuf, AVFrame* avframe) {
             avframe->linesize[i] = efbuf->ef_frame.plane[i].stride;
             avframe->data[i]     = avframe->buf[i]->data;
         }
+        // 当zero_copy= 1的时候，av_hwframe_get_buffer会执行下面这条命令，所以这条指令务必在这个{}中。
+        avframe->hw_frames_ctx = av_buffer_ref(log_ctx->hw_frames_ctx);
     }
-    avframe->hw_frames_ctx = av_buffer_ref(log_ctx->hw_frames_ctx);
-
     /* 2. get avframe information */
     avframe->key_frame = 0;
     if (efbuf->ef_frame.pic_type == TOPSCODEC_PIC_TYPE_IDR || efbuf->ef_frame.pic_type == TOPSCODEC_PIC_TYPE_I)

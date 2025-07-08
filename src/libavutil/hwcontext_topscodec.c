@@ -275,6 +275,7 @@ static int topscodec_device_create(AVHWDeviceContext* device_ctx, const char* de
         pthread_mutex_unlock(&g_hw_mutex);
         return ret;
     }
+    av_log(NULL, AV_LOG_DEBUG, "topscodec_set_device[%d] success\n", device_idx);
     pthread_mutex_unlock(&g_hw_mutex);
     return 0;
 }
