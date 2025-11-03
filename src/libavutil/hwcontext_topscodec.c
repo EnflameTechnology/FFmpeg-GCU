@@ -36,17 +36,23 @@
 #include "mem.h"
 #include "pixdesc.h"
 #include "pixfmt.h"
+#include "version.h"
 
 #define TOPSCODEC_FRAME_ALIGNMENT 1  // tops align
 
 static pthread_mutex_t g_hw_mutex = PTHREAD_MUTEX_INITIALIZER;
 
+#if LIBAVUTIL_VERSION_INT < AV_VERSION_INT(56, 14, 100)  // n3.x do not support AV_PIX_FMT_GRAY10BE
+static const enum AVPixelFormat supported_formats[] = {AV_PIX_FMT_YUV420P, AV_PIX_FMT_NV12,    AV_PIX_FMT_NV21,
+                                                       AV_PIX_FMT_RGB24,   AV_PIX_FMT_RGB24P,  AV_PIX_FMT_BGR24,
+                                                       AV_PIX_FMT_BGR24P,  AV_PIX_FMT_YUV444P, AV_PIX_FMT_YUV444P10BE,
+                                                       AV_PIX_FMT_P010BE,  AV_PIX_FMT_P010LE,  AV_PIX_FMT_GRAY8};
+#else
 static const enum AVPixelFormat supported_formats[] = {
-    AV_PIX_FMT_YUV420P,     AV_PIX_FMT_NV12,      AV_PIX_FMT_NV21,   AV_PIX_FMT_RGB24,
-    AV_PIX_FMT_RGB24P,      AV_PIX_FMT_BGR24,     AV_PIX_FMT_BGR24P, AV_PIX_FMT_YUV444P,
-    AV_PIX_FMT_YUV444P10LE, AV_PIX_FMT_P010LE_EF, AV_PIX_FMT_P010LE, AV_PIX_FMT_GRAY8,
-};
-// 3.2 not support AV_PIX_FMT_GRAY10
+    AV_PIX_FMT_YUV420P, AV_PIX_FMT_NV12,   AV_PIX_FMT_NV21,    AV_PIX_FMT_RGB24,       AV_PIX_FMT_RGB24P,
+    AV_PIX_FMT_BGR24,   AV_PIX_FMT_BGR24P, AV_PIX_FMT_YUV444P, AV_PIX_FMT_YUV444P10BE, AV_PIX_FMT_P010BE,
+    AV_PIX_FMT_P010LE,  AV_PIX_FMT_GRAY8,  AV_PIX_FMT_GRAY10LE};
+#endif
 
 static int topscodec_frames_get_constraints(AVHWDeviceContext* ctx, const void* hwconfig,
                                             AVHWFramesConstraints* constraints) {
@@ -188,7 +194,8 @@ static int topscodec_transfer_data(AVHWFramesContext* ctx, AVFrame* dst, const A
         return AVERROR(ENOSYS);
     }
     for (int i = 0; i < 4; i++) {
-        linesizes1[i] = linesizes[i];
+        linesizes1[i]    = linesizes[i];
+        dst->linesize[i] = 0;  // init to zero
         // av_log(ctx, AV_LOG_DEBUG, "ptrlinesizes[%d]:%d\n", i,
         // linesizes1[i]);
     }
@@ -237,7 +244,7 @@ static int topscodec_device_init(AVHWDeviceContext* device_ctx) {
     AVTOPSCodecDeviceContext* ctx = device_ctx->hwctx;
     (void)ctx;
     (void)ret;
-    // do something
+    av_log(NULL, AV_LOG_DEBUG, "topscodec_device_init success\n");
     return 0;
 }
 
@@ -266,8 +273,18 @@ static int topscodec_device_create(AVHWDeviceContext* device_ctx, const char* de
         return ret;
     }
 
+    // ret = ctx->topsruntime_lib_ctx->lib_topsInit(0);
+    // if (ret != 0) {
+    //     av_log(NULL, AV_LOG_ERROR, "Error, tops initfailed, ret(%d)\n", ret);
+    //     ret = AVERROR(EINVAL);
+    //     pthread_mutex_unlock(&g_hw_mutex);
+    //     return ret;
+    // }
+    // av_log(NULL, AV_LOG_DEBUG, "topsInit success\n");
+
     if (device) device_idx = strtol(device, NULL, 0);
 
+    av_log(NULL, AV_LOG_DEBUG, "topscodec_set_device: device_idx[%d]\n", device_idx);
     ret = ctx->topsruntime_lib_ctx->lib_topsSetDevice(device_idx);
     if (ret != 0) {
         av_log(NULL, AV_LOG_ERROR, "Error, topscodec_set_device[%d] failed, ret(%d)\n", device_idx, ret);

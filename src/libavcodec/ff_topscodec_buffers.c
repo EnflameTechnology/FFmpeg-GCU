@@ -36,6 +36,31 @@
 
 static pthread_mutex_t g_buf_mutex = PTHREAD_MUTEX_INITIALIZER;
 
+void dump_frame_info(const AVFrame* avframe) {
+    av_log(NULL, AV_LOG_DEBUG, "===== AVFrame Properties =====\n");
+    // 基本属性
+    av_log(NULL, AV_LOG_DEBUG, "key_frame:%d\n", avframe->key_frame);
+    av_log(NULL, AV_LOG_DEBUG, "format(%d): %s\n", avframe->format, av_get_pix_fmt_name(avframe->format));
+    av_log(NULL, AV_LOG_DEBUG, "pict_type: %d (%c)\n", avframe->pict_type,
+           av_get_picture_type_char(avframe->pict_type));
+
+    // PTS和时间基
+    av_log(NULL, AV_LOG_DEBUG, "pts: %" PRId64 "\n", avframe->pts);
+    // av_log(NULL, AV_LOG_DEBUG, "time_base: %d/%d\n", avframe->time_base.num, avframe->time_base.den);
+
+    // av_log(NULL, AV_LOG_DEBUG, "frame pos:%ld\n", avframe->pkt_pos);
+    av_log(NULL, AV_LOG_DEBUG, "frame duration:%ld\n", avframe->pkt_duration);
+    // av_log(NULL, AV_LOG_DEBUG, "frame pkt_size:%d\n", avframe->pkt_size);
+
+    // 色彩空间
+    av_log(NULL, AV_LOG_DEBUG, "color_primaries: %d (%s)\n", avframe->color_primaries,
+           av_color_primaries_name(avframe->color_primaries));
+    av_log(NULL, AV_LOG_DEBUG, "color_trc: %d (%s)\n", avframe->color_trc, av_color_transfer_name(avframe->color_trc));
+    av_log(NULL, AV_LOG_DEBUG, "colorspace: %d (%s)\n", avframe->colorspace, av_color_space_name(avframe->colorspace));
+    av_log(NULL, AV_LOG_DEBUG, "color_range: %d (%s)\n", avframe->color_range,
+           av_color_range_name(avframe->color_range));
+}
+
 static enum AVColorPrimaries topscodec_get_color_primaries(const EFBuffer* buf) { return AVCOL_PRI_UNSPECIFIED; }
 
 static enum AVColorRange topscodec_get_color_range(const EFBuffer* buf) { return AVCOL_RANGE_UNSPECIFIED; }
@@ -64,6 +89,8 @@ static enum AVPictureType tops_2_av_pic_type(topscodecPicType_t type) {
     switch (type) {
         case TOPSCODEC_PIC_TYPE_I:
             return AV_PICTURE_TYPE_I;
+        case TOPSCODEC_PIC_TYPE_IDR:
+            return AV_PICTURE_TYPE_I;
         case TOPSCODEC_PIC_TYPE_P:
             return AV_PICTURE_TYPE_P;
         case TOPSCODEC_PIC_TYPE_B:
@@ -75,7 +102,7 @@ static enum AVPictureType tops_2_av_pic_type(topscodecPicType_t type) {
 }
 
 static int key_frame(topscodecPicType_t type) {
-    if (type == TOPSCODEC_PIC_TYPE_IDR) return 1;
+    if (type == TOPSCODEC_PIC_TYPE_IDR | type == TOPSCODEC_PIC_TYPE_I) return 1;
     return 0;
 }
 
@@ -100,6 +127,66 @@ static enum AVColorSpace topscodec_get_color_space2(const EFBuffer* buf) {
 }
 
 static enum AVColorTransferCharacteristic topscodec_get_color_trc(const EFBuffer* buf) { return AVCOL_TRC_UNSPECIFIED; }
+
+typedef struct {
+    enum AVPixelFormat     av_fmt;
+    topscodecPixelFormat_t tops_fmt;
+} PixelFormatMap;
+
+static const PixelFormatMap pixels_format_map[] = {
+    {AV_PIX_FMT_NV12, TOPSCODEC_PIX_FMT_NV12},                  // 8bit Semi-planar Y4-U1V1.
+    {AV_PIX_FMT_NV21, TOPSCODEC_PIX_FMT_NV21},                  // 8bit Semi-planar Y4-V1U1.
+    {AV_PIX_FMT_YUV420P, TOPSCODEC_PIX_FMT_I420},               // 8bit Planar Y4-U1-V1.
+    {AV_PIX_FMT_YUV420P, TOPSCODEC_PIX_FMT_YV12},               // 8bit Planar Y4-V1-U1.    fixme
+    {AV_PIX_FMT_YUYV422, TOPSCODEC_PIX_FMT_YUYV},               // 8bit packed Y2U1Y2V1.
+    {AV_PIX_FMT_UYVY422, TOPSCODEC_PIX_FMT_UYVY},               // 8bit packed U1Y2V1Y2.
+    {AV_PIX_FMT_YUYV422, TOPSCODEC_PIX_FMT_YVYU},               // 8bit packed Y2V1Y2U1.   fixme
+    {AV_PIX_FMT_UYVY422, TOPSCODEC_PIX_FMT_VYUY},               // 8bit packed V1Y2U1Y2.   fixme
+    {AV_PIX_FMT_P010BE, TOPSCODEC_PIX_FMT_P010},                // 10bit semi-planar Y4-U1V1.
+    {AV_PIX_FMT_P010LE, TOPSCODEC_PIX_FMT_P010LE},              // 10bit semi-planar Y4-U1V1 little end.
+    {AV_PIX_FMT_YUV420P10BE, TOPSCODEC_PIX_FMT_I010},           // 10bit planar Y4-U1-V1.
+    {AV_PIX_FMT_YUV444P, TOPSCODEC_PIX_FMT_YUV444},             // 8bit planar Y4-U4-V4.
+    {AV_PIX_FMT_YUV444P10BE, TOPSCODEC_PIX_FMT_YUV444_10BIT},   // 10bit planar Y4-U4-V4.
+    {AV_PIX_FMT_ARGB, TOPSCODEC_PIX_FMT_ARGB},                  // Packed A8R8G8B8.
+    {AV_PIX_FMT_BGRA, TOPSCODEC_PIX_FMT_BGRA},                  // Packed B8G8R8A8.
+    {AV_PIX_FMT_ABGR, TOPSCODEC_PIX_FMT_ABGR},                  // Packed A8B8G8R8.
+    {AV_PIX_FMT_RGBA, TOPSCODEC_PIX_FMT_RGBA},                  // Packed R8G8B8A8.
+    {AV_PIX_FMT_RGB565BE, TOPSCODEC_PIX_FMT_RGB565},            // R5G6B5, 16 bits per pixel.
+    {AV_PIX_FMT_BGR565BE, TOPSCODEC_PIX_FMT_BGR565},            // B5G6R5, 16 bits per pixel.
+    {AV_PIX_FMT_RGB555BE, TOPSCODEC_PIX_FMT_RGB555},            // R5G5B5, 16 bits per pixel.
+    {AV_PIX_FMT_BGR555BE, TOPSCODEC_PIX_FMT_BGR555},            // B5G5R5, 16 bits per pixel.
+    {AV_PIX_FMT_RGB444BE, TOPSCODEC_PIX_FMT_RGB444},            // R4G4B4, 16 bits per pixel.
+    {AV_PIX_FMT_BGR444BE, TOPSCODEC_PIX_FMT_BGR444},            // B4G4R4, 16 bits per pixel.
+    {AV_PIX_FMT_RGB24, TOPSCODEC_PIX_FMT_RGB888},               // 8bit packed R8G8B8.
+    {AV_PIX_FMT_BGR24, TOPSCODEC_PIX_FMT_BGR888},               // 8bit packed R8G8B8.
+    {AV_PIX_FMT_RGB24P, TOPSCODEC_PIX_FMT_RGB3P},               // 8bit planar R-G-B.
+#if LIBAVCODEC_VERSION_INT >= AV_VERSION_INT(58, 18, 100)       // n4.x
+    {AV_PIX_FMT_X2RGB10BE, TOPSCODEC_PIX_FMT_RGB101010},        // 10bit packed R10G10B10. fixme
+    {AV_PIX_FMT_X2RGB10BE, TOPSCODEC_PIX_FMT_BGR101010},        // 10bit packed B10G10R10. fixme
+    {AV_PIX_FMT_GRAY10LE, TOPSCODEC_PIX_FMT_MONOCHROME_10BIT},  // 10bit gray scale.
+#endif
+    {AV_PIX_FMT_GRAY8, TOPSCODEC_PIX_FMT_MONOCHROME},  // 8bit gray scale.
+    {AV_PIX_FMT_BGR24P, TOPSCODEC_PIX_FMT_BGR3P}};     // 8bit planar B-G-R.
+
+enum AVPixelFormat topspixfmt_2_avpixfmt(topscodecPixelFormat_t fmt) {
+    const size_t map_size = sizeof(pixels_format_map) / sizeof(pixels_format_map[0]);
+    for (size_t i = 0; i < map_size; ++i) {
+        if (pixels_format_map[i].tops_fmt == fmt) {
+            return pixels_format_map[i].av_fmt;
+        }
+    }
+    return AV_PIX_FMT_YUV420P;
+}
+
+topscodecPixelFormat_t avpixfmt_2_topspixfmt(enum AVPixelFormat fmt) {
+    const size_t map_size = sizeof(pixels_format_map) / sizeof(pixels_format_map[0]);
+    for (size_t i = 0; i < map_size; ++i) {
+        if (pixels_format_map[i].av_fmt == fmt) {
+            return pixels_format_map[i].tops_fmt;
+        }
+    }
+    return TOPSCODEC_PIX_FMT_I420;
+}
 
 static void topscodec_free_buffer(void* opaque, uint8_t* unused) {
     int                  ret;
@@ -148,14 +235,14 @@ int ff_topscodec_avframe_to_efbuf(const AVFrame* avframe, EFBuffer* efbuf) {
     topsError_t            tops_ret;
     void*                  data;
     int                    nBytes;
-    AVCodecContext*        log_ctx     = NULL;
+    AVCodecContext*        avctx       = NULL;
     EFCodecDecContext_t*   ctx         = NULL;
     TopsRuntimesFunctions* topsruntime = NULL;
     av_assert0(avframe);
     av_assert0(efbuf);
 
-    log_ctx     = efbuf->avctx;
-    ctx         = log_ctx->priv_data;
+    avctx       = efbuf->avctx;
+    ctx         = avctx->priv_data;
     topsruntime = ctx->topsruntime_lib_ctx;
 
     memset(efbuf, 0, sizeof(topscodecFrame_t));
@@ -176,7 +263,7 @@ int ff_topscodec_avframe_to_efbuf(const AVFrame* avframe, EFBuffer* efbuf) {
         av_assert0(nBytes > 0);
         tops_ret = topsruntime->lib_topsMemcpyHtoD(data, avframe->data[i], nBytes);
         if (tops_ret != topsSuccess) {
-            av_log(log_ctx, AV_LOG_ERROR, "h2d: host %p -> dev %p, size %d fuc: %s, line:%d\n", avframe->data[i], data,
+            av_log(avctx, AV_LOG_ERROR, "h2d: host %p -> dev %p, size %d fuc: %s, line:%d\n", avframe->data[i], data,
                    nBytes, __func__, __LINE__);
             return AVERROR_BUG;
         }
@@ -186,7 +273,7 @@ int ff_topscodec_avframe_to_efbuf(const AVFrame* avframe, EFBuffer* efbuf) {
 
 int ff_topscodec_efbuf_to_avframe(const EFBuffer* efbuf, AVFrame* avframe) {
     int                    ret          = 0;
-    AVCodecContext*        log_ctx      = NULL;
+    AVCodecContext*        avctx        = NULL;
     EFCodecDecContext_t*   ctx          = NULL;
     AVHWFramesContext*     hw_frame_ctx = NULL;
     TopsRuntimesFunctions* topsruntime  = NULL;
@@ -200,11 +287,11 @@ int ff_topscodec_efbuf_to_avframe(const EFBuffer* efbuf, AVFrame* avframe) {
     av_assert0(avframe);
     av_assert0(efbuf);
 
-    log_ctx      = efbuf->avctx;
-    ctx          = log_ctx->priv_data;
+    avctx        = efbuf->avctx;
+    ctx          = avctx->priv_data;
     topscodec    = ctx->topscodec_lib_ctx;
     topsruntime  = ctx->topsruntime_lib_ctx;
-    hw_frame_ctx = (AVHWFramesContext*)log_ctx->hw_frames_ctx->data;
+    hw_frame_ctx = (AVHWFramesContext*)avctx->hw_frames_ctx->data;
 
     avframe->height = efbuf->ef_frame.height;
     avframe->width  = efbuf->ef_frame.width;
@@ -212,51 +299,47 @@ int ff_topscodec_efbuf_to_avframe(const EFBuffer* efbuf, AVFrame* avframe) {
     /*reset w and h*/
     hw_frame_ctx->height = efbuf->ef_frame.height;
     hw_frame_ctx->width  = efbuf->ef_frame.width;
-    log_ctx->height      = efbuf->ef_frame.height;
-    log_ctx->width       = efbuf->ef_frame.width;
+    avctx->height        = efbuf->ef_frame.height;
+    avctx->width         = efbuf->ef_frame.width;
+    avframe->format      = topspixfmt_2_avpixfmt(efbuf->ef_frame.pixel_format);
 
-    avframe->format    = topspixfmt_2_avpixfmt(efbuf->ef_frame.pixel_format);
-    avframe->pict_type = tops_2_av_pic_type(efbuf->ef_frame.pic_type);
-    av_log(log_ctx, AV_LOG_DEBUG, "pic_type:%d\n", efbuf->ef_frame.pic_type);
-    avframe->key_frame = key_frame(efbuf->ef_frame.pic_type);
-    av_log(log_ctx, AV_LOG_DEBUG, "key_frame:%d\n", avframe->key_frame);
+    ret = av_image_fill_linesizes(linesizes, avframe->format, avframe->width);
+    if (ret < 0) {
+        av_log(avctx, AV_LOG_ERROR, "av_image_fill_linesizes failed.\n");
+        return AVERROR_BUG;
+    }
+
+    for (int i = 0; i < 4; i++) {
+        linesizes1[i] = linesizes[i];
+        data[i]       = (uint8_t*)efbuf->ef_frame.plane[i].dev_addr;
+        av_log(avctx, AV_LOG_DEBUG, "ptrlinesizes[%d]:%ld\n", i, linesizes1[i]);
+    }
+
+    ret = av_image_fill_plane_sizes(planesizes, avframe->format, avframe->height, linesizes1);
+    if (ret < 0) {
+        av_log(avctx, AV_LOG_ERROR, "av_image_fill_plane_sizes failed.\n");
+        return AVERROR_BUG;
+    }
+
+    if (av_pix_fmt_count_planes(avframe->format) != efbuf->ef_frame.plane_num) {
+        av_log(avctx, AV_LOG_ERROR,
+               "pix:%s,efbuf plane [%d]is not suitable for "
+               "ffmpeg[%d].\n",
+               av_get_pix_fmt_name(avframe->format), efbuf->ef_frame.plane_num,
+               av_pix_fmt_count_planes(avframe->format));
+        return AVERROR_BUG;
+    }
 
     /* 1. get references to the actual data */
     if (!ctx->zero_copy) { /*Not support yet*/
-        ret = av_image_fill_linesizes(linesizes, avframe->format, avframe->width);
-        if (ret < 0) {
-            av_log(log_ctx, AV_LOG_ERROR, "av_image_fill_linesizes failed.\n");
-            return AVERROR_BUG;
-        }
-
-        for (int i = 0; i < 4; i++) {
-            linesizes1[i] = linesizes[i];
-            data[i]       = (uint8_t*)efbuf->ef_frame.plane[i].dev_addr;
-            av_log(log_ctx, AV_LOG_DEBUG, "ptrlinesizes[%d]:%ld\n", i, linesizes1[i]);
-        }
-
-        ret = av_image_fill_plane_sizes(planesizes, avframe->format, avframe->height, linesizes1);
-        if (ret < 0) {
-            av_log(log_ctx, AV_LOG_ERROR, "av_image_fill_plane_sizes failed.\n");
-            return AVERROR_BUG;
-        }
-
-        if (av_pix_fmt_count_planes(avframe->format) != efbuf->ef_frame.plane_num) {
-            av_log(log_ctx, AV_LOG_ERROR,
-                   "pix:%s,efbuf plane [%d]is not suitable for "
-                   "ffmpeg[%d].\n",
-                   av_get_pix_fmt_name(avframe->format), efbuf->ef_frame.plane_num,
-                   av_pix_fmt_count_planes(avframe->format));
-            return AVERROR_BUG;
-        }
         // pthread_mutex_lock(&g_buf_mutex);
-        av_hwframe_get_buffer(log_ctx->hw_frames_ctx, avframe, 0);
+        av_hwframe_get_buffer(avctx->hw_frames_ctx, avframe, 0);
         // pthread_mutex_unlock(&g_buf_mutex);
 
         for (int i = 0; i < efbuf->ef_frame.plane_num; i++) {
             avframe->linesize[i] = efbuf->ef_frame.plane[i].stride;
             if (avframe->linesize[i] != linesizes[i]) {
-                av_log(log_ctx, AV_LOG_ERROR,
+                av_log(avctx, AV_LOG_ERROR,
                        "linesize[%d] is errefbuf linesize:%d,av "
                        "linesize:%d\n",
                        i, avframe->linesize[i], linesizes[i]);
@@ -283,16 +366,15 @@ int ff_topscodec_efbuf_to_avframe(const EFBuffer* efbuf, AVFrame* avframe) {
                 av_frame_unref(avframe);
                 return AVERROR_BUG;
             }
-            av_log(log_ctx, AV_LOG_DEBUG, "d2d: dev %p -> dev %p, size %lu\n", data[i], avframe->data[i],
-                   planesizes[i]);
+            av_log(avctx, AV_LOG_DEBUG, "d2d: dev %p -> dev %p, size %lu\n", data[i], avframe->data[i], planesizes[i]);
         }  // for
         ret = topscodec->lib_topscodecDecFrameUnmap(ctx->handle, &efbuf->ef_frame);
         if (ret != 0) {
-            av_log(log_ctx, AV_LOG_ERROR, "topscodecDecFrameUnmap FAILED.\n");
+            av_log(avctx, AV_LOG_ERROR, "topscodecDecFrameUnmap FAILED.\n");
             av_frame_unref(avframe);
             return AVERROR_BUG;
         }
-        av_log(log_ctx, AV_LOG_DEBUG, "topscodecDecFrameUnmap SUCCESS.\n");
+        av_log(avctx, AV_LOG_DEBUG, "topscodecDecFrameUnmap SUCCESS.\n");
     } else { /*zero copy*/
         for (int i = 0; i < efbuf->ef_frame.plane_num; i++) {
             ret = topscodec_buf_to_bufref(efbuf, i, &avframe->buf[i], planesizes[i]);
@@ -302,38 +384,43 @@ int ff_topscodec_efbuf_to_avframe(const EFBuffer* efbuf, AVFrame* avframe) {
             avframe->data[i]     = avframe->buf[i]->data;
         }
         // 当zero_copy= 1的时候，av_hwframe_get_buffer会执行下面这条命令，所以这条指令务必在这个{}中。
-        avframe->hw_frames_ctx = av_buffer_ref(log_ctx->hw_frames_ctx);
+        avframe->hw_frames_ctx = av_buffer_ref(avctx->hw_frames_ctx);
     }
-    /* 2. get avframe information */
-    avframe->key_frame = 0;
-    if (efbuf->ef_frame.pic_type == TOPSCODEC_PIC_TYPE_IDR || efbuf->ef_frame.pic_type == TOPSCODEC_PIC_TYPE_I)
-        avframe->key_frame = 1;
 
-    avframe->color_primaries = topscodec_get_color_primaries(efbuf);
-    avframe->colorspace      = topscodec_get_color_space2(efbuf);
-    avframe->color_range     = topscodec_get_color_range(efbuf);
-    avframe->color_trc       = topscodec_get_color_trc(efbuf);
+    // if (avctx->pkt_timebase.num && avctx->pkt_timebase.den)
+    //     avframe->pts = av_rescale_q(efbuf->ef_frame.pts, (AVRational){1, 10000000}, avctx->pkt_timebase);
+    // else
 
-    if (log_ctx->pkt_timebase.num && log_ctx->pkt_timebase.den)
-        avframe->pts = av_rescale_q(efbuf->ef_frame.pts, (AVRational){1, 10000000}, log_ctx->pkt_timebase);
-    else
-        avframe->pts = efbuf->ef_frame.pts;
+    // get packet prop
+    if (av_fifo_size(ctx->pkt_prop_fifo) > 0) {
+        AVFrame* prop_avframe_tmp;
+        av_fifo_generic_read(ctx->pkt_prop_fifo, &prop_avframe_tmp, sizeof(AVFrame*), NULL);
+        av_log(avctx, AV_LOG_DEBUG, "prop fifo [%p] Get frame ,size:%d\n", prop_avframe_tmp,
+               av_fifo_size(ctx->pkt_prop_fifo));
+        av_frame_copy_props(avframe, prop_avframe_tmp);
+        avframe->pkt_size = 0;
+        avframe->pkt_pos  = 0;
+        av_fifo_generic_write(ctx->pkt_prop_fifo, &prop_avframe_tmp, sizeof(AVFrame*), NULL);
+        // av_frame_free(&prop_avframe_tmp);
+        // dump_frame_info(avframe);
+    }
 
-    avframe->pkt_pos      = -1;
-    avframe->pkt_duration = 0;
-    avframe->pkt_size     = -1;
+    /* get avframe information */
+    avframe->pict_type = tops_2_av_pic_type(efbuf->ef_frame.pic_type);
+    av_log(avctx, AV_LOG_DEBUG, "pic_type:%d\n", efbuf->ef_frame.pic_type);
+    avframe->key_frame = key_frame(efbuf->ef_frame.pic_type);
+    av_log(avctx, AV_LOG_DEBUG, "key_frame:%d\n", avframe->key_frame);
+    avframe->pts = efbuf->ef_frame.pts;
+    av_log(avctx, AV_LOG_DEBUG, "ef pts:%llu\n", avframe->pts);
 
     if (!ctx->enable_crop && !ctx->enable_resize) {
-        log_ctx->coded_height = efbuf->ef_frame.height;
-        log_ctx->coded_width  = efbuf->ef_frame.width;
+        avctx->coded_height = efbuf->ef_frame.height;
+        avctx->coded_width  = efbuf->ef_frame.width;
     }
-
-    avframe->sample_aspect_ratio = (AVRational){0, 1};  // unknow
-    avframe->interlaced_frame    = ctx->progressive ? 0 : 1;
 
     /* 3. report errors upstream */
     // if (efbuf->ef_frame.pic_type == TOPSCODEC_PIC_TYPE_UNKNOWN) {
-    //     av_log(log_ctx, AV_LOG_ERROR, "driver decode error\n");
+    //     av_log(avctx, AV_LOG_ERROR, "driver decode error\n");
     //     avframe->decode_error_flags |= FF_DECODE_ERROR_INVALID_BITSTREAM;
     // }
 
@@ -341,7 +428,7 @@ int ff_topscodec_efbuf_to_avframe(const EFBuffer* efbuf, AVFrame* avframe) {
 }
 
 int ff_topscodec_efbuf_to_avpkt(const EFBuffer* efbuf, AVPacket* avpkt) {
-    AVCodecContext* log_ctx = efbuf->avctx;
+    AVCodecContext* avctx = efbuf->avctx;
     av_assert0(avpkt);
     av_assert0(efbuf);
 
@@ -349,13 +436,13 @@ int ff_topscodec_efbuf_to_avpkt(const EFBuffer* efbuf, AVPacket* avpkt) {
 
     avpkt->size = efbuf->ef_pkt.data_len;
     avpkt->data = (void*)efbuf->ef_pkt.mem_addr;
-    avpkt->dts = avpkt->pts = efbuf->ef_pkt.pts;
+    avpkt->pts = avpkt->pts = efbuf->ef_pkt.pts;
 
     if (efbuf->ef_pkt.stream_type == TOPSCODEC_NALU_TYPE_IDR || efbuf->ef_pkt.stream_type == TOPSCODEC_NALU_TYPE_I)
         avpkt->flags |= AV_PKT_FLAG_KEY;
 
     if (efbuf->ef_pkt.stream_type == TOPSCODEC_NALU_TYPE_UNKNOWN) {
-        av_log(log_ctx, AV_LOG_ERROR, "driver encode error\n");
+        av_log(avctx, AV_LOG_ERROR, "driver encode error\n");
         avpkt->flags |= AV_PKT_FLAG_CORRUPT;
     }
 
@@ -382,11 +469,14 @@ int ff_topscodec_avpkt_to_efbuf(const AVPacket* avpkt, EFBuffer* efbuf) {
     efpkt->data_len    = avpkt->size;
     efpkt->data_offset = 0;
     efpkt->mem_type    = TOPSCODEC_MEM_TYPE_HOST;
+
     if (avpkt->pts < 0)
         efpkt->pts = 0;
     else
         efpkt->pts = avpkt->pts;
 
+    // ctx->count++;
+    // efpkt->pts         = ctx->count; //
     efpkt->stream_type = TOPSCODEC_NALU_TYPE_UNKNOWN;
     data               = (void*)ctx->stream_addr;
 
@@ -414,68 +504,4 @@ int ff_topscodec_avpkt_to_efbuf(const AVPacket* avpkt, EFBuffer* efbuf) {
     if (avpkt->flags & AV_PKT_FLAG_KEY) efpkt->stream_type = TOPSCODEC_NALU_TYPE_I;
 
     return 0;
-}
-
-topscodecPixelFormat_t avpixfmt_2_topspixfmt(enum AVPixelFormat fmt) {
-    topscodecPixelFormat_t out = TOPSCODEC_PIX_FMT_I420;
-
-    if (fmt == AV_PIX_FMT_NV12)
-        out = TOPSCODEC_PIX_FMT_NV12;
-    else if (fmt == AV_PIX_FMT_NV21)
-        out = TOPSCODEC_PIX_FMT_NV21;
-    else if (fmt == AV_PIX_FMT_YUV420P)
-        out = TOPSCODEC_PIX_FMT_I420;
-    else if (fmt == AV_PIX_FMT_YUV444P)
-        out = TOPSCODEC_PIX_FMT_YUV444;
-    else if (fmt == AV_PIX_FMT_RGB24)
-        out = TOPSCODEC_PIX_FMT_RGB888;
-    else if (fmt == AV_PIX_FMT_BGR24)
-        out = TOPSCODEC_PIX_FMT_BGR888;
-    else if (fmt == AV_PIX_FMT_RGB24P)
-        out = TOPSCODEC_PIX_FMT_RGB3P;
-    else if (fmt == AV_PIX_FMT_BGR24P)
-        out = TOPSCODEC_PIX_FMT_BGR3P;
-    else if (fmt == AV_PIX_FMT_GRAY8)
-        out = TOPSCODEC_PIX_FMT_MONOCHROME;
-    // else if (fmt == AV_PIX_FMT_GRAY10LE)
-    //     out = TOPSCODEC_PIX_FMT_MONOCHROME_10BIT;
-    else if (fmt == AV_PIX_FMT_YUV444P10LE)
-        out = TOPSCODEC_PIX_FMT_YUV444_10BIT;
-    else if (fmt == AV_PIX_FMT_P010LE_EF)
-        out = TOPSCODEC_PIX_FMT_P010LE;
-    else if (fmt == AV_PIX_FMT_P010LE)
-        out = TOPSCODEC_PIX_FMT_P010;
-
-    return out;
-}
-
-enum AVPixelFormat topspixfmt_2_avpixfmt(topscodecPixelFormat_t fmt) {
-    enum AVPixelFormat out = AV_PIX_FMT_YUV420P;
-
-    if (fmt == TOPSCODEC_PIX_FMT_NV12)
-        out = AV_PIX_FMT_NV12;
-    else if (fmt == TOPSCODEC_PIX_FMT_NV21)
-        out = AV_PIX_FMT_NV21;
-    else if (fmt == TOPSCODEC_PIX_FMT_RGB888)
-        out = AV_PIX_FMT_RGB24;
-    else if (fmt == TOPSCODEC_PIX_FMT_BGR888)
-        out = AV_PIX_FMT_BGR24;
-    else if (fmt == TOPSCODEC_PIX_FMT_MONOCHROME)
-        out = AV_PIX_FMT_GRAY8;
-    else if (fmt == TOPSCODEC_PIX_FMT_YUV444)
-        out = AV_PIX_FMT_YUV444P;
-    else if (fmt == TOPSCODEC_PIX_FMT_P010LE)
-        out = AV_PIX_FMT_P010LE_EF;
-    else if (fmt == TOPSCODEC_PIX_FMT_P010)
-        out = AV_PIX_FMT_P010LE;
-    else if (fmt == TOPSCODEC_PIX_FMT_RGB3P)
-        out = AV_PIX_FMT_RGB24P;
-    else if (fmt == TOPSCODEC_PIX_FMT_BGR3P)
-        out = AV_PIX_FMT_BGR24P;
-    // else if (fmt == TOPSCODEC_PIX_FMT_MONOCHROME_10BIT)
-    //     out = AV_PIX_FMT_GRAY10LE;//
-    else if (fmt == TOPSCODEC_PIX_FMT_YUV444_10BIT)
-        out = AV_PIX_FMT_YUV444P10LE;
-
-    return out;
 }

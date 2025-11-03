@@ -131,6 +131,7 @@ typedef struct job_args {
     int         sf;
     int         in_port_num;
     int         out_port_num;
+    int         callback;
     float       fps;
     int         frames;
     int         first_read_frames;
@@ -160,6 +161,7 @@ static int g_skip_frames  = 1;
 static int g_is_av1       = 0;
 static int g_zero_copy    = 1;
 static int g_sync         = 1;
+static int g_cb           = 0;
 
 static const char* g_in_file  = NULL;
 static const char* g_out_file = NULL;
@@ -183,6 +185,7 @@ static void print_globle_var(void) {
     printf("g_out_port_num:%d\n", g_out_port_num);
     printf("g_zero_copy:%d\n", g_zero_copy);
     printf("g_sync:%d\n", g_sync);
+    printf("g_callback:%d\n", g_cb);
 }
 
 static int end_with(const char* str, const char* suffix) {
@@ -524,6 +527,10 @@ static void* job_thread(void* arg) {
     av_dict_set(&dec_opts, "out_port_num", tmp, 0);
 
     memset(tmp, 0, sizeof(tmp));
+    snprintf(tmp, sizeof(tmp), "%d", job->callback);
+    av_dict_set(&dec_opts, "callback", tmp, 0);
+
+    memset(tmp, 0, sizeof(tmp));
     snprintf(tmp, sizeof(tmp), "%d", g_zero_copy);
     av_dict_set(&dec_opts, "zero_copy", tmp, 0);
 
@@ -679,12 +686,17 @@ static int cal_card_dev_session() {
 static int parse_opt(int argc, char** argv) {
     int result;
 
-    while ((result = getopt(argc, argv, "a:e:c:n:d:m:s:i:o:y:l:k:f:b:p:z:w:h:")) != -1) {
+    while ((result = getopt(argc, argv, "a:e:g:c:n:d:m:s:i:o:y:l:k:f:b:p:z:w:h:")) != -1) {
         switch (result) {
             case 'a':
                 printf("option=h, optopt=%c, optarg=%s\n", optopt, optarg);
                 g_zero_copy = atoi(optarg);
                 printf("g_zero_copy:%d\n", g_card_start);
+                break;
+            case 'g':
+                printf("option=h, optopt=%c, optarg=%s\n", optopt, optarg);
+                g_cb = atoi(optarg);
+                printf("g_callback:%d\n", g_cb);
                 break;
             case 'e':
                 printf("option=h, optopt=%c, optarg=%s\n", optopt, optarg);
@@ -821,6 +833,7 @@ int main(int argc, char* argv[]) {
         printf(
             "Usage: %s [-a zero_copy 1/0] "
             "[-e sync 1/0] "
+            "[-g callback 1/0] "
             "[-k kill_self 0/1] "
             "[-l loglevel0/1/2] "
             "[-f switch_frame] "
@@ -840,7 +853,7 @@ int main(int argc, char* argv[]) {
             "-i <input file> -o <output file>\n",
             argv[0]);
         printf(
-            "Example: %s -k 0 -l 2 -c 0 -n 4 -d 0 -m 8 -s 32 -y 0 "
+            "Example: %s -g 1 -k 0 -l 2 -c 0 -n 1 -d 0 -m 4 -s 32 -y 0 "
             "-i input.h264 -o output.yuv\n",
             argv[0]);
         return -1;
@@ -935,6 +948,7 @@ int main(int argc, char* argv[]) {
                 jobs[i][j][k]->sf           = g_frame_sf;
                 jobs[i][j][k]->in_port_num  = g_in_port_num;
                 jobs[i][j][k]->out_port_num = g_out_port_num;
+                jobs[i][j][k]->callback     = g_cb;
                 threads[i][j][k]            = (pthread_t*)malloc(sizeof(pthread_t));
                 memset(name, 0, sizeof(name));
                 memset(g_out_file_copy1, 0, sizeof(g_out_file_copy1));

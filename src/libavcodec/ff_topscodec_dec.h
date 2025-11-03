@@ -36,6 +36,7 @@ typedef struct {
     AVClass* avclass;
     int      device_id;
     int      card_id;
+    int      callback;
     int      hw_id;
     int      sf;
     int      zero_copy;
@@ -90,14 +91,15 @@ typedef struct {
     AVHWFramesContext* hwframes_ctx;
     AVCodecContext*    avctx;
 
-    AVPacket* av_pkt;
-    AVPacket* av_pkt_1;
-    AVFrame   mid_frame;
-    AVFrame*  last_received_frame[MAX_FRAME_NUM];
-    int       idx_put;  // for last_received_frame
-    int       idx_get;  // for last_received_frame
-
-    AVFifoBuffer* avframe_fifo;  // flush buffer
+    AVPacket*     av_pkt;
+    AVPacket*     av_pkt_1;
+    AVFrame       mid_frame;
+    AVFrame*      last_received_frame[MAX_FRAME_NUM];
+    int           idx_put;           // for last_received_frame
+    int           idx_get;           // for last_received_frame
+    AVFifoBuffer* mid_avframe_fifo;  // mid fifo
+    AVFifoBuffer* avframe_fifo;      // flush fifo
+    AVFifoBuffer* pkt_prop_fifo;     // frame prop fifo
 
     EFBuffer* ef_buf_frame[MAX_FRAME_NUM];
     EFBuffer* ef_buf_pkt;
@@ -115,6 +117,7 @@ typedef struct {
     int                    recv_first_frame;
     int                    recv_outport_eos;
     int                    first_packet;
+    uint64_t               count;
 #if LIBAVCODEC_VERSION_INT < AV_VERSION_INT(58, 18, 100)  // 3.x
     AVBSFContext* bsf;
 #endif

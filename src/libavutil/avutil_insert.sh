@@ -126,7 +126,7 @@ fi
 #pixdesc.c 2
 echo "$file" | grep "attribute_deprecated${WS}int${WS}step_minus1;"
 if [ $? -eq 0 ]; then
-    PD_END2='\[AV_PIX_FMT_X2RGB10LE\] = {'
+    PD_END2='\[AV_PIX_FMT_RGB24\] = {'
     PD_TYPE2_RGB24P=$(cat << EOF
             [AV_PIX_FMT_RGB24P] = {\n \
             .name = "rgb24p",\n \
@@ -158,23 +158,8 @@ EOF
 EOF
     )
 
-    PD_TYPE2_P010LE=$(cat << EOF
-            [AV_PIX_FMT_P010LE_EF] = {\n \
-            .name = "p010le_ef",\n \
-            .nb_components = 3,\n \
-            .log2_chroma_w = 1,\n \
-            .log2_chroma_h = 1,\n \
-            .comp = {\n \
-                { 0, 2, 0, 6, 10, 1, 9, 1 },        /* Y */\n \
-                { 1, 4, 0, 6, 10, 3, 9, 1 },        /* U */\n \
-                { 1, 4, 2, 6, 10, 3, 9, 3 },        /* V */\n \
-            },\n \
-            .flags = AV_PIX_FMT_FLAG_PLANAR,\n \
-        },
-EOF
-    )
 else
-    PD_END2='\[AV_PIX_FMT_X2RGB10LE\] = {'
+    PD_END2='\[AV_PIX_FMT_RGB24\] = {'
     PD_TYPE2_RGB24P=$(cat << EOF
             [AV_PIX_FMT_RGB24P] = {\n \
             .name = "rgb24p",\n \
@@ -206,32 +191,16 @@ EOF
 EOF
     )
 
-    PD_TYPE2_P010LE=$(cat << EOF
-            [AV_PIX_FMT_P010LE_EF] = {\n \
-            .name = "p010le_ef",\n \
-            .nb_components = 3,\n \
-            .log2_chroma_w = 1,\n \
-            .log2_chroma_h = 1,\n \
-            .comp = {\n \
-                { 0, 2, 0, 6, 10},        /* Y */\n \
-                { 1, 4, 0, 6, 10},        /* U */\n \
-                { 1, 4, 2, 6, 10},        /* V */\n \
-            },\n \
-            .flags = AV_PIX_FMT_FLAG_PLANAR,\n \
-        },
-EOF
-    )
 fi
 
 sed -i "/${PD_END2}/i \
-${PD_TYPE2_RGB24P} ${PD_TYPE2_BGR24P} ${PD_TYPE2_P010LE}" ${PIXDESC}
+${PD_TYPE2_RGB24P} ${PD_TYPE2_BGR24P}" ${PIXDESC}
 
 #pixfmt.h
 PIX_END="AV_PIX_FMT_NB"
 RGB24P='\\tAV_PIX_FMT_RGB24P,     ///< planar RGB 8:8:8, 24bpp, RRR...GGG...BBB...\n'
 BGR24P='\tAV_PIX_FMT_BGR24P,     ///< planar BGR 8:8:8, 24bpp, BBB...GGG...RRR...\n'
 EFCODEC='\tAV_PIX_FMT_TOPSCODEC,\n'
-P010LE='\tAV_PIX_FMT_P010LE_EF, ///< like NV12, with 10bpp per component, little-endian\n'
 
 PIX_FILE='pixfmt.h'
 
@@ -239,5 +208,4 @@ PIX_FILE='pixfmt.h'
 sed -i "/${PIX_END}/i \
 ${RGB24P}\
 ${BGR24P}\
-${EFCODEC}\
-${P010LE} " ${PIX_FILE}
+${EFCODEC}" ${PIX_FILE}

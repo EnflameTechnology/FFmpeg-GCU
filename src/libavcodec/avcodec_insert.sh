@@ -4,12 +4,12 @@ WS="[[:space:]]*"
 CODEC="AVCodec"
 FILE_CODEC='allcodecs.c'
 
-if grep -Fq "topscodec" $FILE_CODEC;then
-   echo "find topscodec exit"
-   exit 0
+if grep -Fq "topscodec" $FILE_CODEC; then
+  echo "find topscodec exit"
+  exit 0
 fi
 
-if grep -Fq "FFCodec" $FILE_CODEC;then
+if grep -Fq "FFCodec" $FILE_CODEC; then
   CODEC="FFCodec"
   echo "Codec Version is :$FFCodec"
 fi
@@ -17,12 +17,11 @@ fi
 # Add the following line to the end of the file
 # allcodecs.c insert
 
-
-if grep -Fq "REGISTER_DECODER" $FILE_CODEC;then
+if grep -Fq "REGISTER_DECODER" $FILE_CODEC; then
   #3.x
   END_3X="REGISTER_DECODER\(AASC"
   # AVS2_3X='REGISTER_DECODER(AVS2_TOPSCODEC, avs2_topscodec);\n'
-  AVS_3X='REGISTER_DECODER(AVS_TOPSCODEC, avs_topscodec);\n'
+  # AVS_3X='REGISTER_DECODER(AVS_TOPSCODEC, avs_topscodec);\n'
   # AV1_3X='REGISTER_DECODER(AV1_TOPSCODEC, av1_topscodec);\n'
   H263_3X='REGISTER_DECODER(H263_TOPSCODEC, h263_topscodec);\n'
   H264_3X='REGISTER_DECODER(H264_TOPSCODEC, h264_topscodec);\n'
@@ -35,7 +34,7 @@ if grep -Fq "REGISTER_DECODER" $FILE_CODEC;then
   VP9_3X='REGISTER_DECODER(VP9_TOPSCODEC, vp9_topscodec);\n'
   # HWACCEL 3.x
   # S_AVS2_3X='REGISTER_HWACCEL(AVS2_TOPSCODEC, avs2_topscodec);\n'
-  S_AVS_3X='REGISTER_HWACCEL(AVS_TOPSCODEC, avs_topscodec);\n'
+  # S_AVS_3X='REGISTER_HWACCEL(AVS_TOPSCODEC, avs_topscodec);\n'
   # S_AV1_3X='REGISTER_HWACCEL(AV1_TOPSCODEC, av1_topscodec);\n'
   S_H263_3X='REGISTER_HWACCEL(H263_TOPSCODEC, h263_topscodec);\n'
   S_H264_3X='REGISTER_HWACCEL(H264_TOPSCODEC, h264_topscodec);\n'
@@ -48,7 +47,6 @@ if grep -Fq "REGISTER_DECODER" $FILE_CODEC;then
   S_VP9_3X='REGISTER_HWACCEL(VP9_TOPSCODEC, vp9_topscodec);\n'
   echo "Codec Version is 3.x"
   sed -E -i "/${END_3X}/a \
-  ${AVS_3X}\
   ${H263_3X}\
   ${H264_3X}\
   ${HEVC_3X}\
@@ -58,7 +56,6 @@ if grep -Fq "REGISTER_DECODER" $FILE_CODEC;then
   ${VC1_3X}\
   ${VP8_3X}\
   ${VP9_3X} \
-  ${S_AVS_3X}\
   ${S_H263_3X}\
   ${S_H264_3X}\
   ${S_HEVC_3X}\

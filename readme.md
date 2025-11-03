@@ -9,6 +9,23 @@
 
 VPU硬件没有显示的flush操作，底层VPU硬件遇到IDR帧自动flush，为了兼容ffmpeg中flush，默认flush采用销毁decoder，重新创建decoder的方式。
 
+|  Frame 参数         |    是否支持  |
+| :----------:        | :-------:   |
+|     width           |  yes        |
+|     height          |  yes        |
+|     format          |  yes        |
+|     ptx             |  yes        |
+|     duration        |  yes        |
+|     pic_type        |  yes        |
+|     key_frame       |  yes        |
+|     color_primaries |  yes        |
+|     colorspace      |  yes        |
+|     color_rage      |  yes        |
+|     color_trc       |  yes        |
+|sample_aspect_ratio  |  yes        |
+
+说明：GCU-VPU 输出frame本身不带color_primaries, colorspace, color_rage, color_trc这四个参数，所以这四个参数需要ffmpeg自带的解码器在find_stream_info阶段获取，所以必须要编译ffmpeg本身自带的h264,h265等解码器。
+
 ## 如何编译ffmpeg？
 
 下载tops-codec-headers项目，在tops-codec-headers文件夹中执行：
@@ -247,7 +264,7 @@ Codec 的设备节点在/dev 目录下，标准形式为/dev/gcuXvidY，其中`X
 | 8     | AV_PIX_FMT_NV12                     | nv12      |
 | 9     | AV_PIX_FMT_NV21                     | nv21      |
 | 10    | AV_PIX_FMT_YUV444P10LE              | yuv444ple |
-| 11    | AV_PIX_FMT_P010LE(topscodec p010)   | p010      |
+| 11    | AV_PIX_FMT_P010LE(topscodec p010be) | p010be    |
 | 12    | AV_PIX_FMT_P010BE(topscodec p010le) | p010le    |
 | 13    | AV_PIX_FMT_GRAY10LE                 | gray10    |
 

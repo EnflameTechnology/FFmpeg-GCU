@@ -111,5 +111,6 @@ int ff_topscodec_avpkt_to_efbuf(const AVPacket* pkt, EFBuffer* efbuf);
 /* useful pix trans func */
 topscodecPixelFormat_t avpixfmt_2_topspixfmt(enum AVPixelFormat fmt);
 enum AVPixelFormat     topspixfmt_2_avpixfmt(topscodecPixelFormat_t fmt);
+void                   dump_frame_info(const AVFrame* avframe);
 
 #endif  // AVCODEC_EF_BUFFERS_H

@@ -188,6 +188,30 @@ echo "add hw_decode_tops to examples"
 ${ffmpeg_dir}/doc/example_insert.sh # add hw_decode_tops to examples
 popd
 
+c_compiler="gcc"
+gcc_basever=$($c_compiler -dumpversion)
+gcc_major=$(echo $gcc_basever | cut -d. -f1)
+
+if [ "$gcc_major" -lt 5 ]; then
+    compat_header_dir="$src_path/src/compat/gcc4"
+    if [ -d "$compat_header_dir" ]; then
+        _whole_c_flags="$_whole_c_flags -isystem $compat_header_dir"
+    fi
+fi
+
+if [ "$FFMPEG_TAG" != "n3.2" ]; then
+    _custom_configure_options+='--enable-decoder=av1 '
+    _custom_configure_options+='--enable-decoder=av1_topscodec '
+    _custom_configure_options+='--enable-decoder=avs_topscodec '
+    _custom_configure_options+='--enable-decoder=avs2_topscodec '
+    _custom_configure_options+='--disable-x86asm '
+fi
+
+if [ "$FFMPEG_TAG" == "n3.2" ]; then
+    _custom_configure_options+='--disable-asm '
+    _custom_configure_options+='--disable-yasm '
+fi
+
 echo "configure FFmpeg"  #--toolchain=gcc-asan \   
 ./configure \
     --prefix=${build_path}/ffmpeg_gcu \
@@ -195,7 +219,6 @@ echo "configure FFmpeg"  #--toolchain=gcc-asan \
     --extra-ldflags="$_ldflags" \
     --disable-stripping \
     --disable-optimizations \
-    --disable-x86asm \
     --enable-pic \
     --enable-swscale \
     --enable-topscodec \
@@ -212,7 +235,8 @@ echo "configure FFmpeg"  #--toolchain=gcc-asan \
     --enable-decoder=avs_topscodec \
     --enable-decoder=avs2_topscodec \
     --enable-static \
-    --enable-shared 
+    --enable-shared \
+    $_custom_configure_options
 
 if [ $? -ne 0 ]; then
     echo "configure failed"
