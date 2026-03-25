@@ -3,8 +3,8 @@ set -eu -o pipefail
 set +eu +o pipefail
 
 FFMPEG_TAG="n4.4"
-# FFMPEG_REPO=${FFMPEG_REPO:-"https://github.com/FFmpeg/FFmpeg.git"}
-FFMPEG_REPO=${FFMPEG_REPO:-"http://git.enflame.cn/sw/va/FFmpeg.git"} #for debug
+FFMPEG_REPO=${FFMPEG_REPO:-"https://github.com/FFmpeg/FFmpeg.git"}
+# FFMPEG_REPO=${FFMPEG_REPO:-"http://git.enflame.cn/sw/va/FFmpeg.git"} # for internal
 
 ffmpeg_dir=""
 parallel="-j$(nproc)"
@@ -199,6 +199,8 @@ if [ "$gcc_major" -lt 5 ]; then
     fi
 fi
 
+_whole_c_flags="$_whole_c_flags -I${src_path}/include"
+
 if [ "$FFMPEG_TAG" != "n3.2" ]; then
     _custom_configure_options+='--enable-decoder=av1 '
     _custom_configure_options+='--enable-decoder=av1_topscodec '
@@ -308,7 +310,7 @@ PACKAGE_NAME="ffmpeg-gcu"
 PACKAGE_VERSION=1.0
 PACKAGE_ARCH="amd64"
 PACKAGE_DESCRIPTION="FFmpeg with GCU support"
-PACKAGE_MAINTAINER="zhencheng.cai@enflame-tech.com"
+PACKAGE_MAINTAINER="peak.zhu@enflame-tech.com"
 
 # Create directory structure
 DEB_DIR="${build_path}/ffmpeg_gcu"
