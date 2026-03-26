@@ -24,6 +24,15 @@ FFmpeg-GCU 是基于 [燧原](https://www.enflame-tech.com/) GCU 硬件加速的
 
 具体安装步骤请参见 [TopsPlatform 安装使用手册](https://support.enflame-tech.com/onlinedoc_dev_3.6/_static/topsplatform_html/1-install/quick_started/content/source/index.html)。
 
+#### 已验证的编译环境
+
+| OS           | GCC    | glibc |
+| ------------ | ------ | ----- |
+| Ubuntu 16.04 | 4.8.5  | 2.23  |
+| Ubuntu 18.04 | 7.5.0  | 2.27  |
+| Ubuntu 20.04 | 9.4.0  | 2.31  |
+| Ubuntu 24.04 | 13.3.0 | 2.39  |
+
 ### 2.2 编译出带燧原硬件加速的 FFmpeg 可执行程序
 
 FFmpeg-GCU 编译依赖 TopsPlatform 的头文件，需指定头文件所在的路径（默认安装路径为 /opt/tops/include）。

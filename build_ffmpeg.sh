@@ -201,20 +201,25 @@ fi
 
 _whole_c_flags="$_whole_c_flags -I${src_path}/include"
 
-if [ "$FFMPEG_TAG" != "n3.2" ]; then
-    _custom_configure_options+='--enable-decoder=av1 '
-    _custom_configure_options+='--enable-decoder=av1_topscodec '
-    _custom_configure_options+='--enable-decoder=avs_topscodec '
-    _custom_configure_options+='--enable-decoder=avs2_topscodec '
-    _custom_configure_options+='--disable-x86asm '
-fi
-
 if [ "$FFMPEG_TAG" == "n3.2" ]; then
     _custom_configure_options+='--disable-asm '
     _custom_configure_options+='--disable-yasm '
+else
+    _custom_configure_options+='--enable-decoder=av1_topscodec '
+    _custom_configure_options+='--enable-decoder=avs_topscodec '
+    _custom_configure_options+='--enable-decoder=avs2_topscodec '
+    _custom_configure_options+='--enable-decoder=vc1_topscodec '
+    _custom_configure_options+='--enable-decoder=vp8_topscodec '
+    _custom_configure_options+='--enable-decoder=vp9_topscodec '
+    _custom_configure_options+='--enable-decoder=mpeg4_topscodec '
+    _custom_configure_options+='--enable-decoder=mpeg2_topscodec '
+    _custom_configure_options+='--enable-decoder=mjpeg_topscodec '
+    _custom_configure_options+='--enable-decoder=h263_topscodec '
+    _custom_configure_options+='--disable-x86asm '
+    _custom_configure_options+='--disable-inline-asm '
 fi
 
-echo "configure FFmpeg"  #--toolchain=gcc-asan \   
+echo "configure FFmpeg"
 ./configure \
     --prefix=${build_path}/ffmpeg_gcu \
     --extra-cflags="$_whole_c_flags" \
@@ -224,20 +229,11 @@ echo "configure FFmpeg"  #--toolchain=gcc-asan \
     --enable-pic \
     --enable-swscale \
     --enable-topscodec \
-    --enable-decoder=vc1_topscodec \
-    --enable-decoder=av1_topscodec \
     --enable-decoder=h264_topscodec \
     --enable-decoder=hevc_topscodec \
-    --enable-decoder=vp8_topscodec \
-    --enable-decoder=vp9_topscodec \
-    --enable-decoder=mpeg4_topscodec \
-    --enable-decoder=mpeg2_topscodec \
-    --enable-decoder=mjpeg_topscodec \
-    --enable-decoder=h263_topscodec \
-    --enable-decoder=avs_topscodec \
-    --enable-decoder=avs2_topscodec \
     --enable-static \
     --enable-shared \
+    --disable-doc \
     $_custom_configure_options
 
 if [ $? -ne 0 ]; then
