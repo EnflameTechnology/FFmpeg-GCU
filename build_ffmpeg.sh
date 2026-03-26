@@ -201,6 +201,7 @@ fi
 
 _whole_c_flags="$_whole_c_flags -I${src_path}/include"
 
+_custom_configure_options=""
 if [ "$FFMPEG_TAG" == "n3.2" ]; then
     _custom_configure_options+='--disable-asm '
     _custom_configure_options+='--disable-yasm '
@@ -283,23 +284,6 @@ echo "build ffmpeg gcu done"
 
 # Create Debian package
 echo "Creating Debian package"
-
-# 定义需要检查的包列表
-PACKAGES=("build-essential" "devscripts" "debhelper" "dh-make")
-# 检查并安装包
-sudo apt update
-for pkg in "${PACKAGES[@]}"; do
-    # 使用 dpkg-query 检查包是否已安装
-    if dpkg-query -W -f='${Status}' "$pkg" 2>/dev/null | grep -q "ok installed"; then
-        echo "$pkg 已经安装，跳过安装步骤。"
-    else
-        echo "$pkg 未安装，正在安装..."
-        sudo apt install -y "$pkg"
-    fi
-done
-
-# sudo apt update
-# echo y | sudo apt install build-essential devscripts debhelper dh-make
 
 # Define package variables
 PACKAGE_NAME="ffmpeg-gcu"
