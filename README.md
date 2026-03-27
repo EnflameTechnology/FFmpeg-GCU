@@ -7,7 +7,7 @@ FFmpeg-GCU 是基于 [燧原](https://www.enflame-tech.com/) GCU 硬件加速的
 - 支持 GCU300 及以上硬件
 - 支持 H.264、H.265/HEVC、VP8、VP9、AV1、AVS、AVS2、MJPEG、MPEG2、MPEG4、VC-1、H.263 等格式硬件解码
 - 支持 Online CSC（颜色空间转换）、Resize、Crop、Rotation 等后处理
-- 兼容 FFmpeg 命令行、C API、OpenCV、PyAV、imageio 等多种调用方式
+- 兼容 FFmpeg 命令行、C API 等多种调用方式
 - 支持 FFmpeg n3.2 / n4.4 / n5.0 多版本构建
 
 ## 2 编译与运行
@@ -84,7 +84,7 @@ ffmpeg -c:v hevc_topscodec -output_pixfmt nv12 -i test.265 -y out.yuv
 
 ## 3 文档
 
-详细的使用说明、API 参考、命令行示例及 OpenCV / PyAV 集成指南，请参阅在线文档：
+详细的使用说明、API 参考、命令行示例，请参阅在线文档：
 
 **[FFmpeg-GCU 用户文档](https://support.enflame-tech.com/onlinedoc_dev_3.6/5-program/topscv/FFmpeg_GCU/content/source/index.html)**
 
