@@ -38,7 +38,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-typedef void (*ffmpeg_log_callback)(void* ptr, int level, const char* fmt, va_list vl);
+typedef void (*ffmpeg_log_callback)(void* ptr, int level, const char* fmt,
+                                    va_list vl);
 
 #define LOG_BUF_PREFIX_SIZE 512
 #define LOG_BUF_SIZE 1024
@@ -51,18 +52,21 @@ static int              video_stream_idx                  = 0;
 static int              g_frame_count                     = 0;
 static pthread_mutex_t  cb_av_log_lock;
 
-static int init_decode(const char* in_file, const char* out_file, const char* dev_id, const char* card_id,
-                       const char* out_fmt) {
-    int            ret      = -1;
-    AVStream*      video    = NULL;
-    AVDictionary*  options  = NULL;
-    AVDictionary*  dec_opts = NULL;
-    AVInputFormat* fmt      = NULL;
-    const AVCodec* p_codec  = NULL;
-    const char*    tmp_name = NULL;
+static int init_decode(const char* in_file, const char* out_file,
+                       const char* dev_id, const char* card_id,
+                       const char* out_fmt, int stride_align) {
+    int            ret         = -1;
+    AVStream*      video       = NULL;
+    AVDictionary*  options     = NULL;
+    AVDictionary*  dec_opts    = NULL;
+    AVInputFormat* fmt         = NULL;
+    const AVCodec* p_codec     = NULL;
+    const char*    tmp_name    = NULL;
+    char           opt_str[32] = {0};
 
     if ((ret = avformat_network_init()) != 0) {
-        av_log(g_dec_ctx, AV_LOG_INFO, "avformat_network_init failed, ret(%d)\n", ret);
+        av_log(g_dec_ctx, AV_LOG_INFO,
+               "avformat_network_init failed, ret(%d)\n", ret);
         return ret;
     }
     if (!strncmp(in_file, "rtsp", 4) || !strncmp(in_file, "rtmp", 4)) {
@@ -89,16 +93,19 @@ static int init_decode(const char* in_file, const char* out_file, const char* de
     ret = avformat_open_input(&g_ifmt_ctx, in_file, fmt, &options);
     av_dict_free(&options);
     if (ret < 0) {
-        av_log(g_dec_ctx, AV_LOG_INFO, "avformat_open_input failed[%s], ret(%d)\n", in_file, ret);
+        av_log(g_dec_ctx, AV_LOG_INFO,
+               "avformat_open_input failed[%s], ret(%d)\n", in_file, ret);
         return ret;
     }
     ret = avformat_find_stream_info(g_ifmt_ctx, NULL);
     if (ret < 0) {
-        av_log(g_dec_ctx, AV_LOG_INFO, "avformat_find_stream_info failed, ret(%d)\n", ret);
+        av_log(g_dec_ctx, AV_LOG_INFO,
+               "avformat_find_stream_info failed, ret(%d)\n", ret);
         return ret;
     }
     for (size_t i = 0; i < g_ifmt_ctx->nb_streams; i++) {
-        if (g_ifmt_ctx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
+        if (g_ifmt_ctx->streams[i]->codecpar->codec_type ==
+            AVMEDIA_TYPE_VIDEO) {
             video            = g_ifmt_ctx->streams[i];
             video_stream_idx = i;
             break;
@@ -160,7 +167,8 @@ static int init_decode(const char* in_file, const char* out_file, const char* de
     }
     g_dec_ctx = avcodec_alloc_context3(p_codec);
     if (avcodec_parameters_to_context(g_dec_ctx, video->codecpar) != 0) {
-        av_log(g_dec_ctx, AV_LOG_INFO, "Could not copy codec context, ret(%d)\n", ret);
+        av_log(g_dec_ctx, AV_LOG_INFO,
+               "Could not copy codec context, ret(%d)\n", ret);
         return -1;
     }
 
@@ -168,6 +176,10 @@ static int init_decode(const char* in_file, const char* out_file, const char* de
     if (dev_id) av_dict_set(&dec_opts, "device_id", dev_id, 0);
     if (out_fmt) /* for color space trans*/
         av_dict_set(&dec_opts, "output_pixfmt", out_fmt, 0);
+
+    memset(opt_str, 0, sizeof(opt_str));
+    snprintf(opt_str, sizeof(opt_str), "%d", stride_align);
+    av_dict_set(&dec_opts, "stride_align", opt_str, 0);
     /*+++++++++++++++++++++++++++++++++++++++++++++++++++++*/
     // examples for other options:
     // 1. set the out_port_num
@@ -223,35 +235,50 @@ static int init_decode(const char* in_file, const char* out_file, const char* de
     return 0;
 }
 
-static void save_yuv_file(AVCodecContext* dec_ctx, AVFrame* frame) {
+static void save_yuv_file(AVCodecContext* dec_ctx, AVFrame* frame,
+                          int stride_align) {
     int      size   = 0;
     int      ret    = 0;
     uint8_t* buffer = NULL;
 
-    size = av_image_get_buffer_size(frame->format, frame->width, frame->height, 1);
+    size = av_image_get_buffer_size(frame->format, frame->width, frame->height,
+                                    stride_align);
+    if (size < 0) {
+        av_log(dec_ctx, AV_LOG_ERROR, "Can not get buffer size, ret(%d)\n",
+               size);
+        return;
+    }
 
     buffer = av_malloc(size);
     if (!buffer) {
         av_log(dec_ctx, AV_LOG_ERROR, "Can not alloc buffer\n");
         return;
     }
-
-    ret = av_image_copy_to_buffer(buffer, size, (const uint8_t* const*)frame->data, (const int*)frame->linesize,
-                                  frame->format, frame->width, frame->height, 1);
+    memset(buffer, 0, size);
+    ret = av_image_copy_to_buffer(buffer, size,
+                                  (const uint8_t* const*)frame->data,
+                                  (const int*)frame->linesize, frame->format,
+                                  frame->width, frame->height, stride_align);
     if (ret < 0) {
-        av_log(dec_ctx, AV_LOG_ERROR, "Can not copy image to buffer\n");
+        av_log(dec_ctx, AV_LOG_ERROR, "Can not copy image to buffer, ret(%d)\n",
+               ret);
+        av_free(buffer);
         return;
     }
 
     if ((ret = fwrite(buffer, 1, size, fp_yuv)) < 0) {
-        av_log(dec_ctx, AV_LOG_ERROR, "Failed to dump raw data.\n");
+        av_log(dec_ctx, AV_LOG_ERROR, "Failed to dump raw data, ret(%d)\n",
+               ret);
+        av_free(buffer);
         return;
     }
-    av_log(dec_ctx, AV_LOG_DEBUG, "save frame to yuv file[%d]\n", g_frame_count);
+    av_log(dec_ctx, AV_LOG_DEBUG,
+           "save frame to yuv file[%d], size[%d], stride_align[%d]\n",
+           g_frame_count, size, stride_align);
     av_free(buffer);
 }
 
-static int decode(AVCodecContext* dec_ctx) {
+static int decode(AVCodecContext* dec_ctx, int stride_align) {
     int      ret;
     AVPacket packet;
     AVFrame* p_frame;
@@ -265,7 +292,8 @@ static int decode(AVCodecContext* dec_ctx) {
             av_log(g_dec_ctx, AV_LOG_INFO, "av_read_frame got eof\n");
             eos = 1;
         } else if (ret < 0) {
-            av_log(g_dec_ctx, AV_LOG_ERROR, "av_read_frame failed, ret(%d)\n", ret);
+            av_log(g_dec_ctx, AV_LOG_ERROR, "av_read_frame failed, ret(%d)\n",
+                   ret);
             goto fail;
         }
 
@@ -274,15 +302,16 @@ static int decode(AVCodecContext* dec_ctx) {
             continue;
         }
         packet.dts = 0;
-        av_log(g_dec_ctx, AV_LOG_DEBUG, "packet pts[%ld], dts:[%ld]\n", packet.pts, packet.dts);
+        av_log(g_dec_ctx, AV_LOG_DEBUG, "packet pts[%ld], dts:[%ld]\n",
+               packet.pts, packet.dts);
         ret = avcodec_send_packet(dec_ctx, &packet);
         if (ret < 0) {
-            av_log(dec_ctx, AV_LOG_ERROR, "send pkt failed, ret(%d), %s, %d\n", ret, __FILE__, __LINE__);
+            av_log(dec_ctx, AV_LOG_ERROR, "send pkt failed, ret(%d), %s, %d\n",
+                   ret, __FILE__, __LINE__);
             goto fail;
         }
 
         while (ret >= 0 || eos) {
-            printf("decode frame=====\n");
             ret = avcodec_receive_frame(dec_ctx, p_frame);
             if (ret == AVERROR_EOF) {
                 av_log(g_dec_ctx, AV_LOG_INFO, "dec receive eos\n");
@@ -291,7 +320,7 @@ static int decode(AVCodecContext* dec_ctx) {
                 return 0;
             } else if (ret == 0) {
                 g_frame_count++;
-                save_yuv_file(dec_ctx, p_frame);
+                save_yuv_file(dec_ctx, p_frame, stride_align);
                 av_frame_unref(p_frame);
             } else if (ret < 0 && ret != AVERROR(EAGAIN)) {
                 av_log(dec_ctx, AV_LOG_ERROR, "receive frame failed\n");
@@ -306,7 +335,8 @@ fail:
     return -1;
 }
 
-static void log_callback_null(void* ptr, int level, const char* fmt, va_list vl) {
+static void log_callback_null(void* ptr, int level, const char* fmt,
+                              va_list vl) {
     pthread_mutex_lock(&cb_av_log_lock);
     snprintf(logBufPrefix, LOG_BUF_PREFIX_SIZE, "%s", fmt);
     vsnprintf(logBuffer, LOG_BUF_SIZE, logBufPrefix, vl);
@@ -320,6 +350,7 @@ static void log_callback_null(void* ptr, int level, const char* fmt, va_list vl)
 int main(int argc, char** argv) {
     int                 ret = -1;
     const char *        in_file, *out_file, *dev_id, *out_fmt, *card_id;
+    int                 stride_align;
     ffmpeg_log_callback fptrLog;
 
 #if LIBAVCODEC_VERSION_INT < AV_VERSION_INT(58, 18, 100)
@@ -330,10 +361,10 @@ int main(int argc, char** argv) {
     if (argc < 5) {
         fprintf(stderr,
                 "Usage:%s <input file> <output file> <card id> <dev id> "
-                "<out fmt>"
+                "<out fmt> <stride align> "
                 "\n card_id 0~7"
                 "\n dev_id 0~7"
-                "\n out formt:"
+                "\n out format:"
                 "\n yuv420p"
                 "\n rgb24"
                 "\n bgr24"
@@ -373,6 +404,12 @@ int main(int argc, char** argv) {
         out_fmt = NULL;
     }
 
+    if (argv[6]) {
+        stride_align = atoi(argv[6]);
+    } else {
+        stride_align = 1;
+    }
+
     // Get the DEBUG environment variable
     const char* debug_env    = getenv("DEBUG");
     int         log_level    = 0;
@@ -383,7 +420,7 @@ int main(int argc, char** argv) {
     printf("card_id: %s\n", card_id);
     printf("dev_id : %s\n", dev_id);
     printf("out_fmt: %s\n", out_fmt);
-
+    printf("stride_align: %d\n", stride_align);
     if (debug_env != NULL) {
         log_level    = atoi(debug_env);
         ff_log_level = log_level == 0 ? AV_LOG_PANIC : AV_LOG_DEBUG;
@@ -393,13 +430,14 @@ int main(int argc, char** argv) {
         printf("DEBUG level: %d\n", log_level);
     }
 
-    ret = init_decode(in_file, out_file, dev_id, card_id, out_fmt);
+    ret =
+        init_decode(in_file, out_file, dev_id, card_id, out_fmt, stride_align);
     if (ret < 0) {
         av_log(g_dec_ctx, AV_LOG_INFO, "init decode failed\n");
         return -1;
     }
 
-    ret = decode(g_dec_ctx);
+    ret = decode(g_dec_ctx, stride_align);
     if (ret < 0) {
         av_log(g_dec_ctx, AV_LOG_INFO, "decode failed\n");
     }

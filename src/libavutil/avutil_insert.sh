@@ -122,7 +122,6 @@ ${FUN_CON}" imgutils.c
 
 fi
 
-
 #pixdesc.c 2
 echo "$file" | grep "attribute_deprecated${WS}int${WS}step_minus1;"
 if [ $? -eq 0 ]; then
@@ -155,6 +154,21 @@ EOF
             },\n \
             .flags = AV_PIX_FMT_FLAG_PLANAR | AV_PIX_FMT_FLAG_RGB,\n \
         },
+EOF
+    )
+     PD_TYPE2_P010LE_LSB=$(cat << EOF
+        [AV_PIX_FMT_P010LE_LSB] = {\n \
+        .name = "p010le_lsb",\n \
+        .nb_components = 3,\n \
+        .log2_chroma_w = 1,\n \
+        .log2_chroma_h = 1,\n \
+        .comp = {\n \
+            { 0, 2, 0, 0, 10 },        /* Y */\n \
+            { 1, 4, 0, 0, 10 },        /* U */\n \
+            { 1, 4, 2, 0, 10 },        /* V */\n \
+        }, \n \
+        .flags = AV_PIX_FMT_FLAG_PLANAR,\n \
+    },
 EOF
     )
 
@@ -191,15 +205,32 @@ EOF
 EOF
     )
 
+    PD_TYPE2_P010LE_LSB=$(cat << EOF
+        [AV_PIX_FMT_P010LE_LSB] = {\n \
+        .name = "p010le_lsb",\n \
+        .nb_components = 3,\n \
+        .log2_chroma_w = 1,\n \
+        .log2_chroma_h = 1,\n \
+        .comp = {\n \
+            { 0, 2, 0, 0, 10 },        /* Y */\n \
+            { 1, 4, 0, 0, 10 },        /* U */\n \
+            { 1, 4, 2, 0, 10 },        /* V */\n \
+        }, \n \
+        .flags = AV_PIX_FMT_FLAG_PLANAR,\n \
+    },
+EOF
+    )
+
 fi
 
 sed -i "/${PD_END2}/i \
-${PD_TYPE2_RGB24P} ${PD_TYPE2_BGR24P}" ${PIXDESC}
+${PD_TYPE2_RGB24P} ${PD_TYPE2_BGR24P} ${PD_TYPE2_P010LE_LSB}" ${PIXDESC}
 
 #pixfmt.h
 PIX_END="AV_PIX_FMT_NB"
 RGB24P='\\tAV_PIX_FMT_RGB24P,     ///< planar RGB 8:8:8, 24bpp, RRR...GGG...BBB...\n'
 BGR24P='\tAV_PIX_FMT_BGR24P,     ///< planar BGR 8:8:8, 24bpp, BBB...GGG...RRR...\n'
+P010LE_LSB='\tAV_PIX_FMT_P010LE_LSB,     ///< Semi-planar P010LE,LSB, 10bit\n'
 EFCODEC='\tAV_PIX_FMT_TOPSCODEC,\n'
 
 PIX_FILE='pixfmt.h'
@@ -208,4 +239,55 @@ PIX_FILE='pixfmt.h'
 sed -i "/${PIX_END}/i \
 ${RGB24P}\
 ${BGR24P}\
+${P010LE_LSB}\
 ${EFCODEC}" ${PIX_FILE}
+
+# stride_align
+# # FFmpeg 7.0 imgutils.c 路径（请确保路径正确，若不同请修改）
+# FILE="imgutils.c"
+# TAG_LINE="ret = av_image_fill_plane_sizes(sizes, pix_fmt, height, aligned_linesize);"
+
+# # 要插入的新对齐逻辑（保持 FFmpeg 4空格缩进风格）
+# AV_IMAGE_GET_BUFFER_SIZE=$(cat << 'EOF'
+#     // 核心修正：按像素格式的抽样比例，基于 Y 平面对齐所有平面
+#     int valid_planes = av_pix_fmt_count_planes(pix_fmt);
+#     if (valid_planes > 0) {
+#         // 步骤 1:先对齐 Y 平面（第 0 平面）
+#         aligned_linesize[0] = FFALIGN(linesize[0], align);
+#         if (aligned_linesize[0] < linesize[0])
+#             return AVERROR(EINVAL);
+
+#         // 步骤 2:根据像素格式的色度抽样比例，对齐 UV 平面
+#         // 关键:获取色度宽度缩放比例(log2_chroma_w)→ 2^log2_chroma_w = 缩放分母
+#         int log2_chroma_w = desc->log2_chroma_w;
+#         int chroma_w_scale = 1 << log2_chroma_w; // 如 YUV420P 的 log2_chroma_w=1 → scale=2
+
+#         // 遍历 UV 平面(i=1,2,仅处理有效平面)
+#         for (i = 1; i < valid_planes; i++) {
+#             // 核心逻辑:UV linesize = 对齐后的 Y linesize / 缩放比例（保持抽样比例）
+#             aligned_linesize[i] = aligned_linesize[0] / chroma_w_scale;
+
+#             // 安全校验 1:UV linesize 不能小于原始 linesize(避免数据截断)
+#             if (aligned_linesize[i] < linesize[i])
+#                 return AVERROR(EINVAL);
+
+#             // 安全校验 2:UV linesize 需是「单分量字节数」的整数倍(避免像素错位)
+#             // 单分量字节数 = 每个像素分量的存储字节数(如 8bit=1 字节,10bit=2 字节)
+#             int comp_bits = desc->comp[i].depth;
+#             int comp_bytes = (comp_bits + 7) / 8; // 向上取整（如 10bit→2 字节）
+#             if (aligned_linesize[i] % comp_bytes != 0) {
+#                 // 若不满足，向上取整到最近的 comp_bytes 整数倍
+#                 aligned_linesize[i] = FFALIGN(aligned_linesize[i], comp_bytes);
+#             }
+#         }
+#     }
+# EOF
+# )
+
+# if grep -qF "$TAG_LINE" "$FILE"; then
+#    # Insert ADD_LINE before the matching line using temporary file
+#    TMP_FILE=$(mktemp)
+#    echo "$AV_IMAGE_GET_BUFFER_SIZE" > "$TMP_FILE"
+#    awk -v tmpfile="$TMP_FILE" '/ret = av_image_fill_plane_sizes\(sizes, pix_fmt, height, aligned_linesize\);/ {while ((getline line < tmpfile) > 0) print line; close(tmpfile)} 1' ${FILE} > ${FILE}.tmp && mv ${FILE}.tmp ${FILE}
+#    rm -f "$TMP_FILE"
+# fi

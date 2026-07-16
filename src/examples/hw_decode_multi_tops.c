@@ -47,13 +47,15 @@
 #include <string.h>
 #include <unistd.h>
 
-typedef void (*ffmpeg_log_callback)(void* ptr, int level, const char* fmt, va_list vl);
+typedef void (*ffmpeg_log_callback)(void* ptr, int level, const char* fmt,
+                                    va_list vl);
 
 #define LOG_BUF_PREFIX_SIZE (512)
 #define LOG_BUF_SIZE (1024)
 #define MAX_CARD_ID (4 * 8)
 #define MAX_DEV_ID (8)
 #define MAX_SESSIONS (64)
+#define SESSION_BATCH_SIZE (32)
 #define MAX_PATH_LEN (256 * 2)
 #define DEVICE_NAME "topscodec"
 static char            logBufPrefix[LOG_BUF_PREFIX_SIZE] = {0};
@@ -67,9 +69,7 @@ typedef struct {
     int             released;
 } pseudo_barrier_t;
 
-static pseudo_barrier_t g_barrier_start;
 static pseudo_barrier_t g_barrier_frame;
-static pseudo_barrier_t g_barrier_end;
 
 static void pseudo_barrier_init(pseudo_barrier_t* b, int count) {
     pthread_mutex_init(&b->mutex, NULL);
@@ -98,31 +98,6 @@ static void pseudo_barrier_destroy(pseudo_barrier_t* b) {
     b->released = 0;
 }
 
-typedef enum Sync_type { SYNC_START, SYNC_FRAME, SYNC_END } Sync_type;
-
-static const char* Sync_type2str(Sync_type type) {
-    switch (type) {
-        case SYNC_START:
-            return "SYNC_START";
-        case SYNC_FRAME:
-            return "SYNC_FRAME";
-        case SYNC_END:
-            return "SYNC_END";
-        default:
-            return "UNKNOWN";
-    }
-}
-
-static void synchoronize(Sync_type type) {
-    av_log(NULL, AV_LOG_DEBUG, "synchoronize:%s\n", Sync_type2str(type));
-    if (type == SYNC_START)
-        pseudo_barrier_wait(&g_barrier_start);
-    else if (type == SYNC_FRAME)
-        pseudo_barrier_wait(&g_barrier_frame);
-    else if (type == SYNC_END)
-        pseudo_barrier_wait(&g_barrier_end);
-}
-
 typedef struct job_args {
     int         card_id;
     int         dev_id;
@@ -144,27 +119,29 @@ typedef struct job_args {
     const char* in_file;
 } job_args_t;
 
-static int g_input_w      = 0;
-static int g_input_h      = 0;
-static int g_card_start   = 0;
-static int g_card_end     = 1;
-static int g_dev_start    = 0;
-static int g_dev_end      = 1;
-static int g_sessions     = 1;
-static int g_dump_out     = 0;
-static int g_log_level    = 2;
-static int g_kill_flag    = 0;
-static int g_frame_sf     = 0;
-static int g_in_port_num  = 8;
-static int g_out_port_num = 8;
-static int g_skip_frames  = 1;
-static int g_is_av1       = 0;
-static int g_zero_copy    = 1;
-static int g_sync         = 1;
-static int g_cb           = 0;
-
-static const char* g_in_file  = NULL;
-static const char* g_out_file = NULL;
+static int         g_input_w      = 0;
+static int         g_input_h      = 0;
+static int         g_card_start   = 0;
+static int         g_card_end     = 1;
+static int         g_dev_start    = 0;
+static int         g_dev_end      = 1;
+static int         g_sessions     = 1;
+static int         g_dump_out     = 0;
+static int         g_log_level    = 2;
+static int         g_kill_flag    = 0;
+static int         g_frame_sf     = 0;
+static int         g_in_port_num  = 8;
+static int         g_out_port_num = 8;
+static int         g_skip_frames  = 1;
+static int         g_is_av1       = 0;
+static int         g_zero_copy    = 1;
+static int         g_sync         = 1;
+static int         g_cb           = 0;
+static int         g_stride_align = 1;
+static int         g_balance      = 0;
+static int         g_serial_mode  = 0;
+static const char* g_in_file      = NULL;
+static const char* g_out_file     = NULL;
 
 static void print_globle_var(void) {
     printf("g_input_w:%d\n", g_input_w);
@@ -186,18 +163,9 @@ static void print_globle_var(void) {
     printf("g_zero_copy:%d\n", g_zero_copy);
     printf("g_sync:%d\n", g_sync);
     printf("g_callback:%d\n", g_cb);
-}
-
-static int end_with(const char* str, const char* suffix) {
-    size_t str_len    = strlen(str);
-    size_t suffix_len = strlen(suffix);
-
-    if (str_len < suffix_len) {
-        return 0;
-    }
-
-    const char* str_suffix = str + (str_len - suffix_len);
-    return strcmp(str_suffix, suffix) == 0;
+    printf("g_stride_align:%d\n", g_stride_align);
+    printf("g_balance:%d\n", g_balance);
+    printf("g_serial_mode:%d\n", g_serial_mode);
 }
 
 #define SUICIDE()                     \
@@ -256,19 +224,8 @@ static AVCodec* create_decoder(enum AVCodecID codec_id) {
     return decoder;
 }
 
-// static int hw_decoder_init(AVBufferRef** hw_device_ctx, AVCodecContext* ctx, const enum AVHWDeviceType type,
-//                            const char* card_id) {
-//     int ret = 0;
-
-//     if ((ret = av_hwdevice_ctx_create(hw_device_ctx, type, card_id, NULL, 0)) < 0) {
-//         av_log(ctx, AV_LOG_ERROR, "Failed to create specified HW device.\n");
-//         return ret;
-//     }
-//     ctx->hw_device_ctx = av_buffer_ref(*hw_device_ctx);
-//     return ret;
-// }
-
-static enum AVPixelFormat get_hw_format(AVCodecContext* ctx, const enum AVPixelFormat* pix_fmts) {
+static enum AVPixelFormat get_hw_format(AVCodecContext*           ctx,
+                                        const enum AVPixelFormat* pix_fmts) {
     const enum AVPixelFormat* p;
 
     for (p = pix_fmts; *p != -1; p++) {
@@ -279,16 +236,16 @@ static enum AVPixelFormat get_hw_format(AVCodecContext* ctx, const enum AVPixelF
     return AV_PIX_FMT_NONE;
 }
 
-static int decode_write(job_args_t* job, FILE* outfile, AVCodecContext* avctx, AVPacket* packet, int send_eos) {
+static int decode_write(job_args_t* job, FILE* outfile, AVCodecContext* avctx,
+                        AVPacket* packet, int send_eos) {
     AVFrame* frame    = NULL;
     AVFrame* sw_frame = NULL;
     uint8_t* buffer   = NULL;
 
-    int       ret           = -1;
-    int       size          = 0;
-    int       linesizes[4]  = {0};
-    ptrdiff_t linesizes1[4] = {0};
-    size_t    planesizes[4] = {0};
+    int                ret  = -1;
+    int                size = 0;
+    int                avframe_format;
+    AVHWFramesContext* hwframe_ctx;
 
     ret = avcodec_send_packet(avctx, packet);
     if (ret < 0) {
@@ -296,122 +253,136 @@ static int decode_write(job_args_t* job, FILE* outfile, AVCodecContext* avctx, A
         return ret;
     }
 
+    frame = av_frame_alloc();
+    sw_frame = av_frame_alloc();
+    if (!frame || !sw_frame) {
+        av_log(avctx, AV_LOG_ERROR, "Can not alloc frame.\n");
+        av_frame_free(&frame);
+        av_frame_free(&sw_frame);
+        return AVERROR(ENOMEM);
+    }
+
     while (1) {
-        if (!(frame = av_frame_alloc()) || !(sw_frame = av_frame_alloc())) {
-            av_log(avctx, AV_LOG_ERROR, "Can not alloc frame.\n");
-            ret = AVERROR(ENOMEM);
-            goto fail;
-        }
+        av_frame_unref(frame);
 
         ret = avcodec_receive_frame(avctx, frame);
         if (ret == AVERROR_EOF) {
-            av_buffer_unref(&frame->hw_frames_ctx);
-            av_frame_free(&frame);
-            av_frame_free(&sw_frame);
-            return 0;
+            ret = 0;
+            break;
         } else if (ret == AVERROR(EAGAIN)) {
-            av_buffer_unref(&frame->hw_frames_ctx);
-            av_frame_free(&frame);
-            av_frame_free(&sw_frame);
             if (send_eos) {
-                av_usleep(1);
+                av_usleep(1000);
                 av_log(avctx, AV_LOG_DEBUG, "EOS EAGAIN\n");
                 continue;
             } else {
-                av_usleep(1);
                 av_log(avctx, AV_LOG_DEBUG, "EAGAIN\n");
-                return 0;
+                ret = 0;
+                break;
             }
         } else if (ret < 0) {
-            av_log(avctx, AV_LOG_ERROR, "Error while avcodec_receive_frame, ret=%d\n", ret);
-            goto fail;
+            av_log(avctx, AV_LOG_ERROR,
+                   "Error while avcodec_receive_frame, ret=%d\n", ret);
+            break;
         }
 
         job->frames++;
         if (job->frames == g_skip_frames) {
-            if (g_sync) synchoronize(SYNC_FRAME);
+            if (g_sync) pseudo_barrier_wait(&g_barrier_frame);
             job->first_read_frames = job->frames;
             job->start_time        = av_gettime();
         }
 
-        if (g_dump_out && outfile) {
-            size = av_image_get_buffer_size(frame->format, frame->width, frame->height, 1);
+        av_assert0(frame->format == AV_PIX_FMT_TOPSCODEC);
+        av_assert0(frame->hw_frames_ctx);
+        av_assert0(frame->hw_frames_ctx->data);
+        av_assert0(avctx->codec_type == AVMEDIA_TYPE_VIDEO);
+        hwframe_ctx    = (AVHWFramesContext*)frame->hw_frames_ctx->data;
+        avframe_format = hwframe_ctx->sw_format;
+        av_log(avctx, AV_LOG_DEBUG, "avframe_format:%s\n",
+               av_get_pix_fmt_name(avframe_format));
+        av_log(avctx, AV_LOG_DEBUG, "codec_type:%s\n",
+               av_get_media_type_string(avctx->codec_type));
 
+        if (g_dump_out && outfile) {
+            size = av_image_get_buffer_size(avframe_format, frame->width,
+                                            frame->height, g_stride_align);
+            if (size < 0) {
+                av_log(avctx, AV_LOG_ERROR,
+                       "Can not get buffer size, ret(%d)\n", size);
+                ret = size;
+                break;
+            }
             /*Be sure to obtain w/h/format from the output frame.*/
+            av_frame_unref(sw_frame);
             sw_frame->width  = frame->width;
             sw_frame->height = frame->height;
-            sw_frame->format = frame->format;
+            sw_frame->format = avframe_format;
 
-            av_log(avctx, AV_LOG_DEBUG, "frame format:%s, w:%d, h:%d\n", av_get_pix_fmt_name(frame->format),
-                   frame->width, frame->height);
-            ret = av_image_fill_linesizes(linesizes, sw_frame->format, sw_frame->width);
-            if (ret < 0) {
-                av_log(avctx, AV_LOG_ERROR, "av_image_fill_plane_sizes failed.\n");
-                goto fail;
-            }
+            av_log(avctx, AV_LOG_DEBUG, "frame format:%s, w:%d, h:%d\n",
+                   av_get_pix_fmt_name(avframe_format), frame->width,
+                   frame->height);
 
             for (int i = 0; i < 4; i++) {
-                linesizes1[i] = linesizes[i];
-                av_log(avctx, AV_LOG_DEBUG, "ptrlinesizes[%d]:%ld\n", i, linesizes1[i]);
-            }
-            ret = av_image_fill_plane_sizes(planesizes, sw_frame->format, sw_frame->height, linesizes1);
-            if (ret < 0) {
-                av_log(avctx, AV_LOG_ERROR, "av_image_fill_plane_sizes failed.\n");
-                goto fail;
+                sw_frame->linesize[i] = frame->linesize[i];
+                av_log(avctx, AV_LOG_DEBUG, "sw frame linesizes[%d]:%ld\n", i,
+                       sw_frame->linesize[i]);
             }
 
-            av_frame_get_buffer(sw_frame, 0);
-            /*
-            Copy data from the device-side memory to the host/device
-            memory. If you want to copy device-side data to other
-            places, you can use topsMemcpy directly.
-            */
+            av_frame_get_buffer(sw_frame, g_stride_align);
             ret = av_hwframe_transfer_data(sw_frame, frame, 0);
             if (ret < 0) {
-                av_log(avctx, AV_LOG_ERROR, "Error transferring the data to Host memory\n");
-                goto fail;
+                av_log(avctx, AV_LOG_ERROR,
+                       "Error transferring the data to Host memory\n");
+                break;
             }
 
-            /*Allocate a contiguous period of memory*/
             buffer = av_malloc(size);
             if (!buffer) {
                 av_log(avctx, AV_LOG_ERROR, "Can not alloc buffer\n");
                 ret = AVERROR(ENOMEM);
-                goto fail;
+                break;
             }
-
-            /*Copies the non-contiguous content of the three channels
-             * data */
-            /*onto the contiguous buf*/
-            /*data is on the host mem*/
-            ret = av_image_copy_to_buffer(buffer, size, (const uint8_t* const*)sw_frame->data,
-                                          (const int*)sw_frame->linesize, sw_frame->format, sw_frame->width,
-                                          sw_frame->height, 1);
+            memset(buffer, 0, size);
+            av_log(avctx, AV_LOG_DEBUG,
+                   "copy data to "
+                   "buffer,format:%s,width:%d,height:%d,stride_align:%d\n",
+                   av_get_pix_fmt_name(sw_frame->format), sw_frame->width,
+                   sw_frame->height, g_stride_align);
+            ret = av_image_copy_to_buffer(
+                buffer, size, (const uint8_t* const*)sw_frame->data,
+                (const int*)sw_frame->linesize, sw_frame->format,
+                sw_frame->width, sw_frame->height, g_stride_align);
             if (ret < 0) {
                 av_log(avctx, AV_LOG_ERROR, "Can not copy image to buffer\n");
-                goto fail;
+                av_freep(&buffer);
+                break;
             }
 
             if ((ret = fwrite(buffer, 1, size, outfile)) < 0) {
                 av_log(avctx, AV_LOG_ERROR, "Failed to dump raw data.\n");
-                goto fail;
+                av_freep(&buffer);
+                break;
             }
+            av_freep(&buffer);
         }
 
-    fail:
-        av_frame_free(&frame);
-        av_frame_free(&sw_frame);
-        av_freep(&buffer);
-        if (ret < 0) {
-            av_log(avctx, AV_LOG_ERROR, "thread:%s fail, ret=%d\n", job->job_name, ret);
-            return ret;
-        }
+        av_log(avctx, AV_LOG_DEBUG, "refcount:%d\n",
+               av_buffer_get_ref_count(frame->buf[0]));
         av_log(avctx, AV_LOG_DEBUG, "app capture frame:%d\n", job->frames);
     }  // while
-    return 0;
+
+    av_frame_free(&frame);
+    av_frame_free(&sw_frame);
+    av_freep(&buffer);
+    if (ret < 0) {
+        av_log(avctx, AV_LOG_ERROR, "thread:%s fail, ret=%d\n",
+               job->job_name, ret);
+    }
+    return ret;
 }
 
-static void log_callback_null(void* ptr, int level, const char* fmt, va_list vl) {
+static void log_callback_null(void* ptr, int level, const char* fmt,
+                              va_list vl) {
     pthread_mutex_lock(&cb_av_log_lock);
     snprintf(logBufPrefix, LOG_BUF_PREFIX_SIZE, "%s", fmt);
     vsnprintf(logBuffer, LOG_BUF_SIZE, logBufPrefix, vl);
@@ -420,14 +391,13 @@ static void log_callback_null(void* ptr, int level, const char* fmt, va_list vl)
 }
 
 static void* job_thread(void* arg) {
-    int              ret           = 0;
-    AVFormatContext* input_ctx     = NULL;
-    AVInputFormat*   fmt           = NULL;
-    AVStream*        video         = NULL;
-    AVCodecContext*  avctx         = NULL;
-    AVCodec*         decoder       = NULL;
-    AVDictionary*    dec_opts      = NULL;
-    AVBufferRef*     hw_device_ctx = NULL;
+    int              ret       = 0;
+    AVFormatContext* input_ctx = NULL;
+    AVInputFormat*   fmt       = NULL;
+    AVStream*        video     = NULL;
+    AVCodecContext*  avctx     = NULL;
+    AVCodec*         decoder   = NULL;
+    AVDictionary*    dec_opts  = NULL;
 
     FILE*    output_file = NULL;
     int64_t  count       = 0;
@@ -453,10 +423,11 @@ static void* job_thread(void* arg) {
     if (type == AV_HWDEVICE_TYPE_NONE) {
         fprintf(stderr, "Device type %s is not supported.\n", dev_type);
         fprintf(stderr, "Available device types:");
-        while ((type = av_hwdevice_iterate_types(type)) != AV_HWDEVICE_TYPE_NONE)
+        while ((type = av_hwdevice_iterate_types(type)) !=
+               AV_HWDEVICE_TYPE_NONE)
             fprintf(stderr, " %s", av_hwdevice_get_type_name(type));
         fprintf(stderr, "\n");
-        return NULL;
+        goto fail;
     }
 #endif
     tmp_name = &job->in_file[strlen(job->in_file) - 4];
@@ -468,12 +439,12 @@ static void* job_thread(void* arg) {
 
     if (avformat_open_input(&input_ctx, job->in_file, fmt, NULL) != 0) {
         fprintf(stderr, "Cannot open input file '%s'\n", job->in_file);
-        return NULL;
+        goto fail;
     }
 
     if (avformat_find_stream_info(input_ctx, NULL) < 0) {
         fprintf(stderr, "Cannot find input stream information.\n");
-        return NULL;
+        goto fail;
     }
 
     for (size_t i = 0; i < input_ctx->nb_streams; i++) {
@@ -486,25 +457,21 @@ static void* job_thread(void* arg) {
 
     if (NULL == video) {
         fprintf(stderr, "video stream is NULL\n");
-        return NULL;
+        goto fail;
     }
 
     decoder = create_decoder(video->codecpar->codec_id);
 
     if (decoder == NULL) {
         fprintf(stderr, "Unsupported codec! \n");
-        return NULL;
+        goto fail;
     }
 
-    if (!(avctx = avcodec_alloc_context3(decoder))) return NULL;
+    if (!(avctx = avcodec_alloc_context3(decoder))) goto fail;
 
-    if (avcodec_parameters_to_context(avctx, video->codecpar) < 0) return NULL;
+    if (avcodec_parameters_to_context(avctx, video->codecpar) < 0) goto fail;
 
     avctx->get_format = get_hw_format;
-
-    memset(tmp, 0, sizeof(tmp));
-    snprintf(tmp, sizeof(tmp), "%d", job->card_id);
-    // if (hw_decoder_init(&hw_device_ctx, avctx, type, tmp) < 0) return NULL;
 
     memset(tmp, 0, sizeof(tmp));
     snprintf(tmp, sizeof(tmp), "%d", job->card_id);
@@ -534,9 +501,16 @@ static void* job_thread(void* arg) {
     snprintf(tmp, sizeof(tmp), "%d", g_zero_copy);
     av_dict_set(&dec_opts, "zero_copy", tmp, 0);
 
+    memset(tmp, 0, sizeof(tmp));
+    snprintf(tmp, sizeof(tmp), "%d", g_stride_align);
+    av_dict_set(&dec_opts, "stride_align", tmp, 0);
+
+    memset(tmp, 0, sizeof(tmp));
+    snprintf(tmp, sizeof(tmp), "%d", g_balance);
+    av_dict_set(&dec_opts, "balance", tmp, 0);
     // case some video format can't detect w/h by avformat_find_stream_info
     // so we need to set the video w/h by user
-    // expecially for the avs2
+    // especially for the avs2
     if (g_input_h > 0 && g_input_w > 0) {
         memset(tmp, 0, sizeof(tmp));
         snprintf(tmp, sizeof(tmp), "%d", g_input_w);
@@ -550,28 +524,26 @@ static void* job_thread(void* arg) {
 
     if ((ret = avcodec_open2(avctx, decoder, &dec_opts)) < 0) {
         fprintf(stderr, "Failed to open codec for stream #%d\n", video_stream);
-        return NULL;
+        goto fail;
     }
     av_dict_free(&dec_opts);
 
     if (!avctx->hw_frames_ctx) {
         av_log(avctx, AV_LOG_ERROR, "avctx hw_frames_ctx is NULL.\n");
         ret = AVERROR(ENOMEM);
-        return NULL;
+        goto fail;
     }
 
     /* open the file to dump raw data */
     if (g_dump_out == 1) {
         output_file = fopen(job->out_file, "w+");
         if (!output_file) {
-            fprintf(stderr, "Could not open destination file %s\n", job->out_file);
-            return NULL;
+            fprintf(stderr, "Could not open destination file %s\n",
+                    job->out_file);
+            goto fail;
         }
         av_log(avctx, AV_LOG_DEBUG, "open output file %s\n", job->out_file);
     }
-    // sychoronize sessions
-    if (g_sync) synchoronize(SYNC_START);
-
     job->frames            = 0;
     job->first_read_frames = 0;
     job->start_time        = 0;
@@ -580,12 +552,12 @@ static void* job_thread(void* arg) {
         if ((ret = av_read_frame(input_ctx, &packet)) < 0) break;
 
         if (video_stream != packet.stream_index) {
+            av_packet_unref(&packet);
             continue;
         }
         ret = decode_write(job, output_file, avctx, &packet, 0);
-        if (ret) break;
-
         av_packet_unref(&packet);
+        if (ret) break;
     }
     job->end_time          = av_gettime();
     job->before_eos_frames = job->frames;
@@ -619,17 +591,24 @@ static void* job_thread(void* arg) {
 
     if (g_dump_out && output_file) {
         fclose(output_file);
+        output_file = NULL;
     }
     if (g_kill_flag) {
         SUICIDE()
     }
-    if (g_sync) synchoronize(SYNC_END);
     av_log(avctx, AV_LOG_INFO, "decode finish, frames:%d\n", job->frames);
 
-    // av_buffer_unref(&hw_device_ctx);
     avcodec_free_context(&avctx);
     avformat_close_input(&input_ctx);
+    return NULL;
 
+fail:
+    fprintf(stderr, "thread %s init failed, compensating barriers\n", job->job_name);
+    if (g_sync) pseudo_barrier_wait(&g_barrier_frame);
+    if (output_file) fclose(output_file);
+    av_dict_free(&dec_opts);
+    avcodec_free_context(&avctx);
+    avformat_close_input(&input_ctx);
     return NULL;
 }
 
@@ -665,7 +644,7 @@ static enum AVCodecID find_codec_id(const char* file) {
     return ret;
 }
 
-static int cal_card_dev_session() {
+static int cal_card_dev_session(void) {
     int total = 0;
     for (int i = g_card_start; i < g_card_end; i++) {
         for (int j = g_dev_start; j < g_dev_end; j++) {
@@ -686,25 +665,37 @@ static int cal_card_dev_session() {
 static int parse_opt(int argc, char** argv) {
     int result;
 
-    while ((result = getopt(argc, argv, "a:e:g:c:n:d:m:s:i:o:y:l:k:f:b:p:z:w:h:")) != -1) {
+    while ((result = getopt(argc, argv,
+                            "a:e:g:c:n:d:m:s:i:o:y:l:k:f:b:p:z:w:h:q:x:t:")) !=
+           -1) {
         switch (result) {
+            case 'x':
+                printf("option=x, optopt=%c, optarg=%s\n", optopt, optarg);
+                g_balance = atoi(optarg);
+                printf("g_balance:%d\n", g_balance);
+                break;
+            case 't':
+                printf("option=t, optopt=%c, optarg=%s\n", optopt, optarg);
+                g_serial_mode = atoi(optarg);
+                printf("g_serial_mode:%d\n", g_serial_mode);
+                break;
             case 'a':
-                printf("option=h, optopt=%c, optarg=%s\n", optopt, optarg);
+                printf("option=a, optopt=%c, optarg=%s\n", optopt, optarg);
                 g_zero_copy = atoi(optarg);
-                printf("g_zero_copy:%d\n", g_card_start);
+                printf("g_zero_copy:%d\n", g_zero_copy);
                 break;
             case 'g':
-                printf("option=h, optopt=%c, optarg=%s\n", optopt, optarg);
+                printf("option=g, optopt=%c, optarg=%s\n", optopt, optarg);
                 g_cb = atoi(optarg);
                 printf("g_callback:%d\n", g_cb);
                 break;
             case 'e':
-                printf("option=h, optopt=%c, optarg=%s\n", optopt, optarg);
+                printf("option=e, optopt=%c, optarg=%s\n", optopt, optarg);
                 g_sync = atoi(optarg);
-                printf("g_sync:%d\n", g_card_start);
+                printf("g_sync:%d\n", g_sync);
                 break;
             case 'c':
-                printf("option=h, optopt=%c, optarg=%s\n", optopt, optarg);
+                printf("option=c, optopt=%c, optarg=%s\n", optopt, optarg);
                 g_card_start = atoi(optarg);
                 printf("g_card_start:%d\n", g_card_start);
                 break;
@@ -714,57 +705,57 @@ static int parse_opt(int argc, char** argv) {
                 printf("g_card_end:%d\n", g_card_end);
                 break;
             case 'd':
-                printf("option=i, optopt=%c, optarg=%s\n", optopt, optarg);
+                printf("option=d, optopt=%c, optarg=%s\n", optopt, optarg);
                 g_dev_start = atoi(optarg);
                 printf("g_dev_start:%d\n", g_dev_start);
                 break;
             case 'm':
-                printf("option=w, optopt=%c, optarg=%s\n", optopt, optarg);
+                printf("option=m, optopt=%c, optarg=%s\n", optopt, optarg);
                 g_dev_end = atoi(optarg);
                 printf("g_dev_end:%d\n", g_dev_end);
                 break;
             case 's':
-                printf("option=w, optopt=%c, optarg=%s\n", optopt, optarg);
+                printf("option=s, optopt=%c, optarg=%s\n", optopt, optarg);
                 g_sessions = atoi(optarg);
                 printf("g_sessions:%d\n", g_sessions);
                 break;
             case 'y':
-                printf("option=y, optopt=%c, optarg=%s\n", optopt, optarg);
+                printf("option=i, optopt=%c, optarg=%s\n", optopt, optarg);
                 g_dump_out = atoi(optarg);
                 printf("g_dump_out:%d\n", g_dump_out);
                 break;
             case 'l':
-                printf("option=y, optopt=%c, optarg=%s\n", optopt, optarg);
+                printf("option=l, optopt=%c, optarg=%s\n", optopt, optarg);
                 g_log_level = atoi(optarg);
                 printf("g_log_level:%d\n", g_log_level);
                 break;
             case 'k':
-                printf("option=y, optopt=%c, optarg=%s\n", optopt, optarg);
+                printf("option=k, optopt=%c, optarg=%s\n", optopt, optarg);
                 g_kill_flag = atoi(optarg);
                 printf("g_kill_flag:%d\n", g_kill_flag);
                 break;
             case 'f':
-                printf("option=y, optopt=%c, optarg=%s\n", optopt, optarg);
+                printf("option=f, optopt=%c, optarg=%s\n", optopt, optarg);
                 g_frame_sf = atoi(optarg);
                 printf("g_frame_sf:%d\n", g_frame_sf);
                 break;
             case 'b':
-                printf("option=y, optopt=%c, optarg=%s\n", optopt, optarg);
+                printf("option=b, optopt=%c, optarg=%s\n", optopt, optarg);
                 g_in_port_num = atoi(optarg);
                 printf("g_in_port_num:%d\n", g_in_port_num);
                 break;
             case 'p':
-                printf("option=y, optopt=%c, optarg=%s\n", optopt, optarg);
+                printf("option=p, optopt=%c, optarg=%s\n", optopt, optarg);
                 g_out_port_num = atoi(optarg);
                 printf("g_out_port_num:%d\n", g_out_port_num);
                 break;
             case 'z':
-                printf("option=y, optopt=%c, optarg=%s\n", optopt, optarg);
+                printf("option=z, optopt=%c, optarg=%s\n", optopt, optarg);
                 g_skip_frames = atoi(optarg);
                 printf("g_skip_frames:%d\n", g_skip_frames);
                 break;
             case 'i':
-                printf("option=h, optopt=%c, optarg=%s\n", optopt, optarg);
+                printf("option=i, optopt=%c, optarg=%s\n", optopt, optarg);
                 g_in_file = optarg;
                 printf("g_in_file:%s\n", g_in_file);
                 break;
@@ -774,14 +765,19 @@ static int parse_opt(int argc, char** argv) {
                 printf("g_out_file:%s\n", g_out_file);
                 break;
             case 'w':
-                printf("option=h, optopt=%c, optarg=%s\n", optopt, optarg);
+                printf("option=w, optopt=%c, optarg=%s\n", optopt, optarg);
                 g_input_w = atoi(optarg);
-                printf("g_input_w:%d\n", g_card_start);
+                printf("g_input_w:%d\n", g_input_w);
                 break;
             case 'h':
                 printf("option=h, optopt=%c, optarg=%s\n", optopt, optarg);
                 g_input_h = atoi(optarg);
-                printf("g_input_h:%d\n", g_card_start);
+                printf("g_input_h:%d\n", g_input_h);
+                break;
+            case 'q':
+                printf("option=q, optopt=%c, optarg=%s\n", optopt, optarg);
+                g_stride_align = atoi(optarg);
+                printf("g_stride_align:%d\n", g_stride_align);
                 break;
             case '?':
                 printf("result=?, optopt=%c, optarg=%s\n", optopt, optarg);
@@ -801,7 +797,6 @@ int main(int argc, char* argv[]) {
     enum AVCodecID codec_id = AV_CODEC_ID_NONE;
 
     ffmpeg_log_callback fptrLog;
-    char                name[MAX_PATH_LEN]                             = {0};
     job_args_t*         jobs[MAX_CARD_ID][MAX_DEV_ID][MAX_SESSIONS]    = {0};
     pthread_t*          threads[MAX_CARD_ID][MAX_DEV_ID][MAX_SESSIONS] = {0};
 
@@ -849,12 +844,15 @@ int main(int argc, char* argv[]) {
             "[-p out_buf_num] "
             "[-w width] "
             "[-h height] "
+            "[-x balance 0/1] "
             "[-y write_out_file 0/1] "
+            "[-q stride_align] "
+            "[-t serial_mode 0/1] "
             "-i <input file> -o <output file>\n",
             argv[0]);
         printf(
-            "Example: %s -g 1 -k 0 -l 2 -c 0 -n 1 -d 0 -m 4 -s 32 -y 0 "
-            "-i input.h264 -o output.yuv\n",
+            "Example: %s -g 1 -k 0 -l 2 -c 0 -n 1 -d 0 -m 4 -s 32 -y 0 -x 1 "
+            "-q 128 -i input.h264 -o output.yuv\n",
             argv[0]);
         return -1;
     }
@@ -894,13 +892,12 @@ int main(int argc, char* argv[]) {
     codec_id = find_codec_id(g_in_file);
 
     if (codec_id == AV_CODEC_ID_NONE) {
-        fprintf(stderr, "unknow codec id !!!\n");
+        fprintf(stderr, "unknown codec id !!!\n");
         return -1;
     }
 
     g_is_av1 = 0;
 #if LIBAVCODEC_VERSION_INT >= AV_VERSION_INT(58, 18, 100)
-    // if (end_with(g_in_file, ".av1") || end_with(g_in_file, ".AV1")) {
     if (codec_id == AV_CODEC_ID_AV1) {
         g_is_av1 = 1;
         printf("file[%s] end with AV1\n", g_in_file);
@@ -927,70 +924,120 @@ int main(int argc, char* argv[]) {
         return -1;
     }
     printf("TOPS_VISIBLE_DEVICE:%s\n", getenv("TOPS_VISIBLE_DEVICE"));
-    int all_session = cal_card_dev_session();
-    pseudo_barrier_init(&g_barrier_start, all_session);
-    pseudo_barrier_init(&g_barrier_end, all_session);
-    pseudo_barrier_init(&g_barrier_frame, all_session);
-    for (int i = g_card_start; i < g_card_end; i++) {
-        for (int j = g_dev_start; j < g_dev_end; j++) {
-            if (g_is_av1) {
-                if (j % 2 == 0) {
-                    av_log(NULL, AV_LOG_INFO, "skip dev_id:%d\n", j);
-                    continue;
-                }
-            }
-            for (int k = 0; k < g_sessions; k++) {
-                jobs[i][j][k]               = (job_args_t*)malloc(sizeof(job_args_t));
-                jobs[i][j][k]->card_id      = i;
-                jobs[i][j][k]->dev_id       = j;
-                jobs[i][j][k]->session_id   = k;
-                jobs[i][j][k]->in_file      = g_in_file;
-                jobs[i][j][k]->sf           = g_frame_sf;
-                jobs[i][j][k]->in_port_num  = g_in_port_num;
-                jobs[i][j][k]->out_port_num = g_out_port_num;
-                jobs[i][j][k]->callback     = g_cb;
-                threads[i][j][k]            = (pthread_t*)malloc(sizeof(pthread_t));
-                memset(name, 0, sizeof(name));
-                memset(g_out_file_copy1, 0, sizeof(g_out_file_copy1));
-                memset(g_out_file_copy2, 0, sizeof(g_out_file_copy2));
-                strncpy(g_out_file_copy1, g_out_file, sizeof(g_out_file_copy1));
-                path = dirname(g_out_file_copy1);
-                strncpy(g_out_file_copy2, g_out_file, sizeof(g_out_file_copy2));
-                file = basename(g_out_file_copy2);
-                snprintf(name, sizeof(name), "%s/card%d_dev%d_session%d_%s", path, i, j, k, file);
-                // rename outfile's name
-                memset(jobs[i][j][k]->out_file, 0, sizeof(jobs[i][j][k]->out_file));
-                memcpy(jobs[i][j][k]->out_file, name, strlen(name));
-                av_log(NULL, AV_LOG_INFO, "out file name: %s\n", name);
-                ret = pthread_create(threads[i][j][k], NULL, job_thread, jobs[i][j][k]);
-                if (ret != 0) {
-                    fprintf(stderr, "pthread_create failed, ret=%d\n", ret);
-                    return -1;
-                }
-                memset(name, 0, sizeof(name));
-                snprintf(name, sizeof(name), "card%d_dev%d_session%d", i, j, k);
-                // pthread_setname_np(*threads[i][j][k], name);
-                memset(jobs[i][j][k]->job_name, 0, sizeof(jobs[i][j][k]->job_name));
-                memcpy(jobs[i][j][k]->job_name, name, strlen(name));
-                av_log(NULL, AV_LOG_INFO, "create thread %s success.\n", name);
-            }
-        }
-    }
 
-    av_log(NULL, AV_LOG_INFO, "main thread wait for all threads to finish\n");
-    for (int i = g_card_start; i < g_card_end; i++) {
-        for (int j = g_dev_start; j < g_dev_end; j++) {
-            if (g_is_av1) {
-                if (j % 2 == 0) {
-                    continue;
+    if (g_serial_mode) {
+        /*
+         * Serial mode (-t 1): process each (card, device) pair sequentially.
+         * Reduces peak thread count from cards*devs*sessions to sessions, avoiding ASan thread registry exhaustion.
+         */
+        for (int i = g_card_start; i < g_card_end; i++) {
+            for (int j = g_dev_start; j < g_dev_end; j++) {
+                if (g_is_av1) {
+                    if (j % 2 == 0) {
+                        av_log(NULL, AV_LOG_INFO, "skip dev_id:%d\n", j);
+                        continue;
+                    }
+                }
+
+                for (int bs = 0; bs < g_sessions; bs += SESSION_BATCH_SIZE) {
+                    int be = bs + SESSION_BATCH_SIZE;
+                    if (be > g_sessions) be = g_sessions;
+
+                    pseudo_barrier_init(&g_barrier_frame, be - bs);
+
+                    for (int k = bs; k < be; k++) {
+                        jobs[i][j][k] = (job_args_t*)malloc(sizeof(job_args_t));
+                        jobs[i][j][k]->card_id      = i;
+                        jobs[i][j][k]->dev_id       = j;
+                        jobs[i][j][k]->session_id   = k;
+                        jobs[i][j][k]->in_file      = g_in_file;
+                        jobs[i][j][k]->sf           = g_frame_sf;
+                        jobs[i][j][k]->in_port_num  = g_in_port_num;
+                        jobs[i][j][k]->out_port_num = g_out_port_num;
+                        jobs[i][j][k]->callback     = g_cb;
+                        threads[i][j][k] = (pthread_t*)malloc(sizeof(pthread_t));
+                        snprintf(g_out_file_copy1, sizeof(g_out_file_copy1), "%s", g_out_file);
+                        path = dirname(g_out_file_copy1);
+                        snprintf(g_out_file_copy2, sizeof(g_out_file_copy2), "%s", g_out_file);
+                        file = basename(g_out_file_copy2);
+                        snprintf(jobs[i][j][k]->out_file, sizeof(jobs[i][j][k]->out_file), "%s/card%d_dev%d_session%d_%s", path, i, j, k, file);
+                        snprintf(jobs[i][j][k]->job_name, sizeof(jobs[i][j][k]->job_name), "card%d_dev%d_session%d", i, j, k);
+
+                        ret = pthread_create(threads[i][j][k], NULL, job_thread, jobs[i][j][k]);
+                        if (ret != 0) {
+                            fprintf(stderr, "pthread_create failed, ret=%d\n", ret);
+                            return -1;
+                        }
+                        av_log(NULL, AV_LOG_INFO, "create thread %s success.\n", jobs[i][j][k]->job_name);
+                    }
+
+                    for (int k = bs; k < be; k++) {
+                        pthread_join(*threads[i][j][k], NULL);
+                        if (threads[i][j][k]) free(threads[i][j][k]);
+                        av_log(NULL, AV_LOG_INFO, "thread join [%s] success\n", jobs[i][j][k]->job_name);
+                    }
+
+                    pseudo_barrier_destroy(&g_barrier_frame);
                 }
             }
-            for (int k = 0; k < g_sessions; k++) {
-                pthread_join(*threads[i][j][k], NULL);
-                if (threads[i][j][k]) free(threads[i][j][k]);
-                av_log(NULL, AV_LOG_INFO, "thread join [%s] success\n", jobs[i][j][k]->job_name);
+        }
+    } else {
+        // Parallel mode (default): all threads across all cards/devices run simultaneously for maximum stress testing throughput.
+        int all_session = cal_card_dev_session();
+        pseudo_barrier_init(&g_barrier_frame, all_session);
+
+        for (int i = g_card_start; i < g_card_end; i++) {
+            for (int j = g_dev_start; j < g_dev_end; j++) {
+                if (g_is_av1) {
+                    if (j % 2 == 0) {
+                        av_log(NULL, AV_LOG_INFO, "skip dev_id:%d\n", j);
+                        continue;
+                    }
+                }
+                for (int k = 0; k < g_sessions; k++) {
+                    jobs[i][j][k] = (job_args_t*)malloc(sizeof(job_args_t));
+                    jobs[i][j][k]->card_id      = i;
+                    jobs[i][j][k]->dev_id       = j;
+                    jobs[i][j][k]->session_id   = k;
+                    jobs[i][j][k]->in_file      = g_in_file;
+                    jobs[i][j][k]->sf           = g_frame_sf;
+                    jobs[i][j][k]->in_port_num  = g_in_port_num;
+                    jobs[i][j][k]->out_port_num = g_out_port_num;
+                    jobs[i][j][k]->callback     = g_cb;
+                    threads[i][j][k] = (pthread_t*)malloc(sizeof(pthread_t));
+                    snprintf(g_out_file_copy1, sizeof(g_out_file_copy1), "%s", g_out_file);
+                    path = dirname(g_out_file_copy1);
+                    snprintf(g_out_file_copy2, sizeof(g_out_file_copy2), "%s", g_out_file);
+                    file = basename(g_out_file_copy2);
+                    snprintf(jobs[i][j][k]->out_file, sizeof(jobs[i][j][k]->out_file), "%s/card%d_dev%d_session%d_%s", path, i, j, k, file);
+                    snprintf(jobs[i][j][k]->job_name, sizeof(jobs[i][j][k]->job_name), "card%d_dev%d_session%d", i, j, k);
+
+                    ret = pthread_create(threads[i][j][k], NULL, job_thread, jobs[i][j][k]);
+                    if (ret != 0) {
+                        fprintf(stderr, "pthread_create failed, ret=%d\n", ret);
+                        return -1;
+                    }
+                    av_log(NULL, AV_LOG_INFO, "create thread %s success.\n", jobs[i][j][k]->job_name);
+                }
             }
         }
+
+        for (int i = g_card_start; i < g_card_end; i++) {
+            for (int j = g_dev_start; j < g_dev_end; j++) {
+                if (g_is_av1) {
+                    if (j % 2 == 0) {
+                        continue;
+                    }
+                }
+                for (int k = 0; k < g_sessions; k++) {
+                    pthread_join(*threads[i][j][k], NULL);
+                    if (threads[i][j][k]) free(threads[i][j][k]);
+                    av_log(NULL, AV_LOG_INFO, "thread join [%s] success\n", jobs[i][j][k]->job_name);
+                }
+            }
+        }
+
+        pseudo_barrier_destroy(&g_barrier_frame);
     }
 
     /*print result msg*/
@@ -1023,10 +1070,11 @@ int main(int argc, char* argv[]) {
                        "dev:%2d, "
                        "session:%2d, "
                        "frames:%5d, "
-                       "skip_frames:%5lu, "
+                       "skip_frames:%5d, "
                        "fps:%5.2f, "
                        "latency:%lu\n",
-                       i, j, k, jobs[i][j][k]->frames, jobs[i][j][k]->first_read_frames, jobs[i][j][k]->fps,
+                       i, j, k, jobs[i][j][k]->frames,
+                       jobs[i][j][k]->first_read_frames, jobs[i][j][k]->fps,
                        jobs[i][j][k]->latency);
             }
             mean_fps         = sum_fps / g_sessions;
@@ -1055,14 +1103,11 @@ int main(int argc, char* argv[]) {
                 "max_fps:%8.2f, "
                 "min_fps:%8.2f, "
                 "mean_fps:%8.2f\n",
-                i, j, g_sessions, g_frame_sf, mean_skip_frames, standard_deviation, mean_latency, max_fps, min_fps,
-                mean_fps);
+                i, j, g_sessions, g_frame_sf, mean_skip_frames,
+                standard_deviation, mean_latency, max_fps, min_fps, mean_fps);
         }
     }
     av_log(NULL, AV_LOG_INFO, "main thread finish\n");
     pthread_mutex_destroy(&cb_av_log_lock);
-    pseudo_barrier_destroy(&g_barrier_start);
-    pseudo_barrier_destroy(&g_barrier_end);
-    pseudo_barrier_destroy(&g_barrier_frame);
     return 0;
 }

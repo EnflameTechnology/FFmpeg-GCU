@@ -16,13 +16,17 @@ sed -i "/${END}/a \
 ${HW_DECODE_TOPS}" ${C_FILE}
 
 END1='--disable-audiotoolbox'
-DISABLE='  --disable-topscodec        disable topscodec support [autodetect]'
+DISABLE='  --disable-topscodec        disable topscodec support [autodetect]\n'
+DISABLE2=' --disable-topscodec_enc    disable topscodec_enc   support [autodetect]'
+
 sed -i "/${END1}/a \
-${DISABLE}" ${C_FILE}
+${DISABLE}\
+${DISABLE2}" ${C_FILE}
 
 END2='HWACCEL_LIBRARY_LIST='
 sed -i "/${END2}/a \
-${HW_DECODE_TOPS}" ${C_FILE}
+${HW_DECODE_TOPS}\
+${HW_ENCODE_TOPS}" ${C_FILE}
 
 #configure 2
 END2='vc1_cuvid_decoder_deps='
@@ -42,6 +46,11 @@ MPEG4='mpeg4_topscodec_decoder_deps="topscodec"\n'
 MPEG2='mpeg2_topscodec_decoder_deps="topscodec"\n'
 MPEG1='mpeg1_topscodec_decoder_deps="topscodec"\n'
 MJPEG='mjpeg_topscodec_decoder_deps="topscodec"\n'
+H264_ENC='h264_topscodec_enc_encoder_deps="topscodec"\n'
+HEVC_ENC='hevc_topscodec_enc_encoder_deps="topscodec"\n'
+VP9_ENC='vp9_topscodec_enc_encoder_deps="topscodec"\n'
+VP8_ENC='vp8_topscodec_enc_encoder_deps="topscodec"\n'
+MJPEG_ENC='mjpeg_topscodec_enc_encoder_deps="topscodec"\n'
 
 sed -i "/${END2}/a \
 ${H263}\
@@ -59,29 +68,43 @@ ${VC1}\
 ${MPEG4}\
 ${MPEG2}\
 ${MPEG1}\
-${MJPEG}" ${C_FILE}
+${MJPEG}\
+${H264_ENC}\
+${HEVC_ENC}\
+${VP9_ENC}\
+${VP8_ENC}\
+${MJPEG_ENC}" ${C_FILE}
 
 #configure 3
 END3='EXAMPLE_LIST="'
 HW_DECODE_TOPS_EXAMPLE='hw_decode_tops_example\n'
 DECODE_TOPS_EXAMPLE='decode_tops_example\n'
-HW_DECODE_MULTI_TOPS_EXAMPLE='hw_decode_multi_tops_example'
+ENCODE_TOPS_EXAMPLE='encode_tops_example\n'
+MULTI_ENCODE_TOPS_EXAMPLE='multi_encode_tops_example\n'
+HW_ENCODE_TOPS_EXAMPLE='hw_encode_tops_example\n'
+HW_DECODE_MULTI_TOPS_EXAMPLE='hw_decode_multi_tops_example\n'
 
 sed -i "/${END3}/a \
 ${HW_DECODE_TOPS_EXAMPLE}\
 ${DECODE_TOPS_EXAMPLE}\
-${HW_DECODE_MULTI_TOPS_EXAMPLE}" ${C_FILE}
+${HW_DECODE_MULTI_TOPS_EXAMPLE}\
+${ENCODE_TOPS_EXAMPLE}\
+${HW_ENCODE_TOPS_EXAMPLE}\
+${MULTI_ENCODE_TOPS_EXAMPLE}" ${C_FILE}
 
 # configure 4
-END4='avio_dir_cmd_deps=\"avformat avutil\"'
+END4='decode_video_example_deps=\"avformat avutil\"'
 HW_DECODE_TOPS_EXAMPLE='hw_decode_tops_example_deps="avcodec avformat avutil"\n'
 DECODE_TOPS_EXAMPLE='decode_tops_example_deps="avcodec avformat avutil"\n'
 HW_DECODE_MULTI_TOPS_EXAMPLE='hw_decode_multi_tops_example_deps="avcodec avformat avutil"\n'
-
+ENCODE_TOPS_EXAMPLE='encode_tops_example_deps="avcodec avformat avutil"\n'
+MULTI_ENCODE_TOPS_EXAMPLE='multi_encode_tops_example_deps="avcodec avformat avutil"\n'
 sed -i "/${END4}/a \
 ${HW_DECODE_TOPS_EXAMPLE}\
 ${DECODE_TOPS_EXAMPLE}\
-${HW_DECODE_MULTI_TOPS_EXAMPLE}" ${C_FILE}
+${HW_DECODE_MULTI_TOPS_EXAMPLE}\
+${ENCODE_TOPS_EXAMPLE}\
+${MULTI_ENCODE_TOPS_EXAMPLE}" ${C_FILE}
 
 # configure 5 for n3.2
 END5='vc1_cuvid_hwaccel_deps='
@@ -99,6 +122,11 @@ MPEG4='mpeg4_topscodec_hwaccel_deps="topscodec"\n'
 MPEG2='mpeg2_topscodec_hwaccel_deps="topscodec"\n'
 MPEG1='mpeg1_topscodec_hwaccel_deps="topscodec"\n'
 MJPEG='mjpeg_topscodec_hwaccel_deps="topscodec"\n'
+H264_ENC='h264_topscodec_enc_encoder_deps="topscodec"\n'
+HEVC_ENC='hevc_topscodec_enc_encoder_deps="topscodec"\n'
+VP9_ENC='vp9_topscodec_enc_encoder_deps="topscodec"\n'
+VP8_ENC='vp8_topscodec_enc_encoder_deps="topscodec"\n'
+MJPEG_ENC='mjpeg_topscodec_enc_encoder_deps="topscodec"\n'
 
 S_H263='h263_topscodec_decoder_select="h263_topscodec_hwaccel"\n'
 S_AV1='av1_topscodec_decoder_select="av1_topscodec_hwaccel"\n'
@@ -143,4 +171,9 @@ ${S_VC1}\
 ${S_MPEG4}\
 ${S_MPEG2}\
 ${S_MPEG1}\
-${S_MJPEG}" ${C_FILE}
+${S_MJPEG}\
+${S_H264_ENC}\
+${S_HEVC_ENC}\
+${S_VP9_ENC}\
+${S_VP8_ENC}\
+${S_MJPEG_ENC}" ${C_FILE}

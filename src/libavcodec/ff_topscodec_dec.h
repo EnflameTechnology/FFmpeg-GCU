@@ -18,19 +18,28 @@
  * License along with FFmpeg; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  *******************************************************************************/
+#include <pthread.h>
+#include <semaphore.h>
+#include <stdatomic.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <unistd.h>
 
-#include "avcodec.h"
-#include "ff_topscodec_buffers.h"
+#include "libavcodec/avcodec.h"
+#include "libavcodec/ff_topscodec_buffers.h"
+#include "libavcodec/version.h"
 #include "libavutil/fifo.h"
 #include "tops/dynlink_tops_loader.h"
-#include "version.h"
 
-#ifndef AVCODEC_EF_TOPSCODEC_DEC_H
-#define AVCODEC_EF_TOPSCODEC_DEC_H
-#define MAX_FRAME_NUM 10
+#ifndef PLATFORMS_GCU_FFMPEG_PLUGIN_SRC_LIBAVCODEC_FF_TOPSCODEC_DEC_H_
+#define PLATFORMS_GCU_FFMPEG_PLUGIN_SRC_LIBAVCODEC_FF_TOPSCODEC_DEC_H_
+#define MAX_FRAME_NUM 16
+
+#if LIBAVCODEC_VERSION_INT >= AV_VERSION_INT(61, 3, 100)  // n7.0
+#define AVFifoBuffer AVFifo
+#define av_fifo_size av_fifo_can_read
+#define av_fifo_freep av_fifo_freep2
+#endif
 
 typedef struct {
     AVClass* avclass;
@@ -38,12 +47,11 @@ typedef struct {
     int      card_id;
     int      callback;
     int      hw_id;
-    int      sf;
+    uint8_t  sf;
     int      zero_copy;
     int      output_buf_num;
     int      input_buf_num;
 
-    int trace_flag;
     int enable_crop;
     int enable_resize;
     int enable_rotation;
@@ -70,57 +78,50 @@ typedef struct {
     int in_height;
     int out_width;
     int out_height;
-    int progressive;
 
-    /* null frame/packet received */
+    int balance;
+
     int                draining;
     topscodecHandle_t  handle;
     topscodecDecCaps_t caps;
     char*              color_space; /*topscodecColorSpace_t*/
     topscodecType_t    codec_type;
-    topscodecRunMode_t run_mode;
-    u32_t              stream_buf_size;
-    u64_t              stream_addr;
-    u64_t              mem_addr;
 
     enum AVPixelFormat output_pixfmt;
     char*              str_output_pixfmt;
 
     AVBufferRef*       hwdevice;
     AVBufferRef*       hwframe;
-    AVHWFramesContext* hwframes_ctx;
-    AVCodecContext*    avctx;
 
-    AVPacket*     av_pkt;
-    AVPacket*     av_pkt_1;
-    AVFrame       mid_frame;
-    AVFrame*      last_received_frame[MAX_FRAME_NUM];
-    int           idx_put;           // for last_received_frame
-    int           idx_get;           // for last_received_frame
-    AVFifoBuffer* mid_avframe_fifo;  // mid fifo
-    AVFifoBuffer* avframe_fifo;      // flush fifo
-    AVFifoBuffer* pkt_prop_fifo;     // frame prop fifo
+    AVPacket*       av_pkt;
+    AVFrame         mid_frame;  // sync mode only
 
-    EFBuffer* ef_buf_frame[MAX_FRAME_NUM];
+    pthread_mutex_t frame_fifo_mutex;
+    pthread_cond_t  frame_fifo_cond;
+    AVFifoBuffer*   frame_fifo;          // async mode: topscodecFrame_t by value
+    sem_t           send_avpacket_sem;   // async mode
+
+    AVFifoBuffer*   mid_avframe_fifo;    // sync mode: AVFrame*
+
+    pthread_mutex_t pkt_prop_mutex;
+    AVFifoBuffer*   pkt_prop_fifo;
+    AVFrame*        pkt_prop_frame;      // async mode: replaces FIFO
+
     EFBuffer* ef_buf_pkt;
 
-    int64_t      last_send_pkt_time;
-    volatile int decoder_start;
-    volatile int decoder_init_flag;
-
-    // AVMutex count_mutex;
-    unsigned long long total_frame_count;
-    unsigned long long total_packet_count;
+    int decoder_init_flag;
+    int first_packet;
+    uint64_t total_frame_count;
+    uint64_t total_packet_count;
 
     TopsCodecFunctions*    topscodec_lib_ctx;
     TopsRuntimesFunctions* topsruntime_lib_ctx;
-    int                    recv_first_frame;
-    int                    recv_outport_eos;
-    int                    first_packet;
-    uint64_t               count;
+    atomic_uint eos_event_flag;
+    atomic_uint close_flag;
 #if LIBAVCODEC_VERSION_INT < AV_VERSION_INT(58, 18, 100)  // 3.x
     AVBSFContext* bsf;
 #endif
+    uint32_t stride_align;
 } EFCodecDecContext_t;
 
-#endif  // AVCODEC_EF_TOPSCODEC_DEC_H
+#endif  // PLATFORMS_GCU_FFMPEG_PLUGIN_SRC_LIBAVCODEC_FF_TOPSCODEC_DEC_H_

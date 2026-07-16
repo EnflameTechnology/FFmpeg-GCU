@@ -1,14 +1,15 @@
 # FFmpeg-GCU
 
-FFmpeg-GCU 是基于 [燧原](https://www.enflame-tech.com/) GCU 硬件加速的 FFmpeg 视频解码插件，通过 TopsCodec SDK 实现高性能视频解码。
+FFmpeg-GCU 是基于 [燧原](https://www.enflame-tech.com/) GCU 硬件加速的 FFmpeg 视频编解码插件，通过 TopsCodec SDK 实现高性能视频编解码。
 
 ## 1 特性
 
 - 支持 GCU300 及以上硬件
 - 支持 H.264、H.265/HEVC、VP8、VP9、AV1、AVS、AVS2、MJPEG、MPEG2、MPEG4、VC-1、H.263 等格式硬件解码
+- 支持 H.264、H.265/HEVC 格式硬件编码
 - 支持 Online CSC（颜色空间转换）、Resize、Crop、Rotation 等后处理
 - 兼容 FFmpeg 命令行、C API 等多种调用方式
-- 支持 FFmpeg n3.2 / n4.4 / n5.0 多版本构建
+- 支持 FFmpeg n3.2 / n4.4 / n7.1 多版本构建
 
 ## 2 编译与运行
 
@@ -24,6 +25,9 @@ FFmpeg-GCU 是基于 [燧原](https://www.enflame-tech.com/) GCU 硬件加速的
 
 具体安装步骤请参见 [TopsPlatform 安装使用手册](https://support.enflame-tech.com/onlinedoc_dev_3.6/_static/topsplatform_html/1-install/quick_started/content/source/index.html)。
 
+推荐预先安装 nasm 汇编器，FFmpeg n4.4 / n7.1 在 x86 平台会默认检测，缺失时会导致 configure 失败。
+或者也可以通过将 build_ffmpeg.sh 脚本中的 _disable_asm 置为 true 直接关闭 CPU 汇编优化，对燧原 GCU 硬件编解码功能没有影响。
+
 #### 已验证的编译环境
 
 | OS           | GCC    | glibc |
@@ -38,26 +42,30 @@ FFmpeg-GCU 是基于 [燧原](https://www.enflame-tech.com/) GCU 硬件加速的
 FFmpeg-GCU 编译依赖 TopsPlatform 的头文件，需指定头文件所在的路径（默认安装路径为 /opt/tops/include）。
 
 ```bash
-# 基本用法（默认 n4.4），TopsPlatform 默认安装的头文件路径在 /opt/tops/include
-./build_ffmpeg.sh n4.4 -f "-I/opt/tops/include"
+# 基本用法（默认 n7.1），TopsPlatform 默认安装的头文件路径在 /opt/tops/include
+./build_ffmpeg.sh n7.1 -f "-I/opt/tops/include"
 
 # 为了避免从 github 上拉取 FFmpeg 源代码缓慢，可以指定本地 FFmpeg 源码路径（提前下载所需版本 FFmpeg 源码）
-./build_ffmpeg.sh n4.4 -f "-I/opt/tops/include" -s /path/to/FFmpeg
+./build_ffmpeg.sh n7.1 -f "-I/opt/tops/include" -s /path/to/FFmpeg
+
+# 指定安装包格式，可选 deb、rpm、both、none、auto，默认生成 deb
+./build_ffmpeg.sh n7.1 -f "-I/opt/tops/include" -P rpm
 
 # 查看完整编译选项
 ./build_ffmpeg.sh -h
 ```
 
-支持的 FFmpeg 版本标签：`n3.2`、`n4.4`、`n5.0`。
+支持的 FFmpeg 版本标签：`n3.2`、`n4.4`、`n7.1`。
 
 如果希望支持更多的 FFmpeg 版本，请联系燧原科技商务对接人员。
 
-编译完成后，在 `build_<tag>/ffmpeg_gcu/` 目录下生成 `.deb` 安装包。
+编译安装结果位于 `<build_path>/ffmpeg_gcu/` 目录。安装包位于 `<build_path>/packages/` 目录，默认生成 `.deb` 安装包，可通过 `-P` 指定生成 `.rpm` 或同时生成两种格式。
 
 ### 2.3 安装
 
 ```bash
-sudo dpkg -x ffmpeg-gcu_<version>_<tag>_amd64.deb /usr/local/
+sudo dpkg -x ffmpeg-gcu_<version>_<arch>.deb /usr/local/
+sudo rpm2cpio ffmpeg-gcu-<version>-1.<arch>.rpm | sudo cpio -idmv -D /usr/local/
 ```
 
 安装后，可在 `/usr/local/lib`、`/usr/local/bin`、`/usr/local/include` 下找到对应的库文件、可执行文件和头文件。
@@ -80,6 +88,12 @@ ffmpeg -c:v h264_topscodec -output_pixfmt yuv420p -i test.264 -y out.yuv
 
 # 将输入文件 test.265 解码，并输出到 out.yuv 文件，YUV文件格式指定为 NV12
 ffmpeg -c:v hevc_topscodec -output_pixfmt nv12 -i test.265 -y out.yuv
+
+# 将输入 YUV 文件编码为 HEVC 码流
+ffmpeg -f rawvideo -pix_fmt yuv420p -s 1920x1080 -i in.yuv -c:v hevc_topscodec_enc -y out.265
+
+# 编码同时设置 GOP、B 帧和帧率参数
+ffmpeg -f rawvideo -pix_fmt yuv420p -s 1920x1080 -i in.yuv -c:v h264_topscodec_enc -g 30 -bf 0 -enc_fps 30 -y out.264
 ```
 
 ## 3 文档

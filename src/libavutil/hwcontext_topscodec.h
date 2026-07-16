@@ -1,4 +1,7 @@
-/*
+/******************************************************************************
+ * Enflame Video Process Platform SDK
+ * Copyright (C) [2025] by Enflame, Inc. All rights reserved
+ *
  * This file is part of FFmpeg.
  *
  * FFmpeg is free software; you can redistribute it and/or
@@ -16,21 +19,22 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef AVUTIL_HWCONTEXT_TOPSCODEC_H
-#define AVUTIL_HWCONTEXT_TOPSCODEC_H
+#ifndef PLATFORMS_GCU_FFMPEG_PLUGIN_SRC_LIBAVUTIL_HWCONTEXT_TOPSCODEC_H_
+#define PLATFORMS_GCU_FFMPEG_PLUGIN_SRC_LIBAVUTIL_HWCONTEXT_TOPSCODEC_H_
 
-#include "pixfmt.h"
+#include "libavutil/pixfmt.h"
 #include "tops/dynlink_tops_loader.h"
 
 /**
  * @file
  * This struct is allocated as AVHWDeviceContext.hwctx.
  */
-typedef struct AVTOPSCodecDeviceContext {
+typedef struct TOPSCodecDeviceContext {
     TopsRuntimesFunctions* topsruntime_lib_ctx;
     AVBufferRef*           dynlink_ref;
+    int                    stride_align;
     int                    reserved[4];
     void*                  reserved2[4];
-} AVTOPSCodecDeviceContext;
+} TOPSCodecDeviceContext;
 
-#endif  // AVUTIL_HWCONTEXT_TOPSCODEC_H
+#endif  // PLATFORMS_GCU_FFMPEG_PLUGIN_SRC_LIBAVUTIL_HWCONTEXT_TOPSCODEC_H_
